@@ -8,41 +8,51 @@ export default function TrenPage() {
   const [points, setPoints] = useState<PointRow[]>([]);
   const [pointId, setPointId] = useState("");
   const [rows, setRows] = useState<MeasurementRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading per bagian (dulu satu gate "Memuat..." untuk seluruh halaman,
+  // jadi halaman kosong melulu sampai titik + data selesai dimuat).
+  const [loadingPoints, setLoadingPoints] = useState(true);
+  const [loadingRows, setLoadingRows] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/points");
-      const data = await res.json();
-      if (data.ok) {
-        setPoints(data.points);
-        if (data.points.length > 0) setPointId(String(data.points[0].id));
-      } else {
-        setError(data.error || "Gagal memuat titik ukur.");
+      setLoadingPoints(true);
+      try {
+        const res = await fetch("/api/points");
+        const data = await res.json();
+        if (data.ok) {
+          setPoints(data.points);
+          if (data.points.length > 0) setPointId(String(data.points[0].id));
+        } else {
+          setError(data.error || "Gagal memuat titik ukur.");
+        }
+      } finally {
+        setLoadingPoints(false);
       }
-      setLoading(false);
     })();
   }, []);
 
   useEffect(() => {
     if (!pointId) return;
     (async () => {
-      const res = await fetch(`/api/measurements?pointId=${pointId}`);
-      const data = await res.json();
-      if (data.ok) {
-        // Urutkan kronologis untuk grafik
-        const sorted = [...data.measurements].sort((a, b) =>
-          `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`),
-        );
-        setRows(sorted);
-      } else {
-        setError(data.error || "Gagal memuat data.");
+      setLoadingRows(true);
+      try {
+        const res = await fetch(`/api/measurements?pointId=${pointId}`);
+        const data = await res.json();
+        if (data.ok) {
+          // Urutkan kronologis untuk grafik
+          const sorted = [...data.measurements].sort((a, b) =>
+            `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`),
+          );
+          setRows(sorted);
+        } else {
+          setError(data.error || "Gagal memuat data.");
+        }
+      } finally {
+        setLoadingRows(false);
       }
     })();
   }, [pointId]);
-
-  if (loading) return <p className="muted">Memuat...</p>;
 
   const debitPts = rows
     .filter((r) => r.debit_lps !== null)
@@ -59,20 +69,28 @@ export default function TrenPage() {
       {error && <div className="error">{error}</div>}
 
       <label htmlFor="point">Titik Ukur</label>
-      <select id="point" value={pointId} onChange={(e) => setPointId(e.target.value)}>
-        {points.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
+      <select id="point" value={pointId} onChange={(e) => setPointId(e.target.value)} disabled={loadingPoints}>
+        {loadingPoints ? (
+          <option value="">Memuat titik...</option>
+        ) : (
+          points.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))
+        )}
       </select>
 
-      <div style={{ marginTop: 14 }}>
-        <TrendChart title={`Debit — ${selected?.name ?? ""}`} unit="L/dtk" points={debitPts} color="#0e7490" />
-        <TrendChart title={`Tekanan — ${selected?.name ?? ""}`} unit="bar" points={pressurePts} color="#b45309" />
-      </div>
+      {loadingRows ? (
+        <p className="muted" style={{ marginTop: 14 }}>Memuat data...</p>
+      ) : (
+        <div style={{ marginTop: 14 }}>
+          <TrendChart title={`Debit — ${selected?.name ?? ""}`} unit="L/dtk" points={debitPts} color="#0e7490" />
+          <TrendChart title={`Tekanan — ${selected?.name ?? ""}`} unit="bar" points={pressurePts} color="#b45309" />
+        </div>
+      )}
 
-      <p className="muted">{rows.length} pengukuran tercatat untuk titik ini.</p>
+      <p className="muted">{loadingRows ? "" : `${rows.length} pengukuran tercatat untuk titik ini.`}</p>
     </div>
   );
 }

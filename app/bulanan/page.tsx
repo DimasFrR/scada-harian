@@ -40,22 +40,26 @@ export default function BulananPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // Dulu satu gate "Memuat..." untuk seluruh halaman — form ikut hilang
+  // sampai data selesai dimuat. Sekarang form langsung tampil, yang
+  // menunggu hanya tabel riwayat di bawah.
+  const [loadingRows, setLoadingRows] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/monthly-billed");
-    const data = await res.json();
-    if (data.ok) setRows(data.months);
-    else setMsg({ kind: "err", text: data.error || "Gagal memuat data bulanan." });
+    setLoadingRows(true);
+    try {
+      const res = await fetch("/api/monthly-billed");
+      const data = await res.json();
+      if (data.ok) setRows(data.months);
+      else setMsg({ kind: "err", text: data.error || "Gagal memuat data bulanan." });
+    } finally {
+      setLoadingRows(false);
+    }
   }, []);
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await load();
-      setLoading(false);
-    })();
+    void load();
   }, [load]);
 
   function editRow(r: MonthlyBilledRow) {
@@ -123,8 +127,6 @@ export default function BulananPage() {
       setMsg({ kind: "err", text: data.error || "Gagal menghapus." });
     }
   }
-
-  if (loading) return <p className="muted">Memuat...</p>;
 
   return (
     <div>
@@ -237,7 +239,14 @@ export default function BulananPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {loadingRows ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    Memuat data...
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => (
                 <tr key={r.month}>
                   <td>
                     <b>{monthNameID(r.month)}</b>
@@ -271,8 +280,8 @@ export default function BulananPage() {
                     )}
                   </td>
                 </tr>
-              ))}
-              {rows.length === 0 && (
+              )))}
+              {!loadingRows && rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="muted">
                     Belum ada data bulanan.

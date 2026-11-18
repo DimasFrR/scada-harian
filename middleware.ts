@@ -5,8 +5,30 @@ import { SESSION_COOKIE, getAppPassword, isValidSession } from "@/lib/auth";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Sudah login tapi mampir ke /login (misalnya lewat tombol back HP —
+  // halaman login ada di riwayat browser): langsung lempar ke aplikasi,
+  // jangan tampilkan form login lagi. Ini yang bikin user merasa "tiap
+  // balik mesti login ulang", padahal sesinya masih hidup.
+  if (pathname === "/login") {
+    const secret = getAppPassword();
+    if (secret) {
+      const ok = await isValidSession(req.cookies.get(SESSION_COOKIE)?.value, secret);
+      if (ok) {
+        const next = req.nextUrl.searchParams.get("next");
+        const dest =
+          next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+        return NextResponse.redirect(new URL(dest, req.url));
+      }
+    }
+    const res = NextResponse.next();
+    // Halaman login jangan di-cache: WebView di APK sempat menyajikan
+    // bundle lama berhari-hari setelah deploy (itu sebabnya tab Input
+    // masih menampilkan "Memuat..." versi lama padahal server sudah baru).
+    res.headers.set("Cache-Control", "no-store, max-age=0");
+    return res;
+  }
+
   if (
-    pathname === "/login" ||
     pathname === "/api/login" ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
@@ -15,13 +37,7 @@ export async function middleware(req: NextRequest) {
     pathname === "/logo.png" ||
     pathname === "/icon-512.png"
   ) {
-    const res = NextResponse.next();
-    // Halaman login jangan di-cache: WebView di APK sempat menyajikan
-    // bundle lama berhari-hari setelah deploy (itu sebabnya tab Input
-    // masih menampilkan "Memuat..." versi lama padahal server sudah baru).
-    // File statis (logo/ikon) dikecualikan — kecil dan jarang berubah.
-    if (pathname === "/login") res.headers.set("Cache-Control", "no-store, max-age=0");
-    return res;
+    return NextResponse.next();
   }
 
   const secret = getAppPassword();
