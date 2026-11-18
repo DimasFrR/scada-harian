@@ -87,7 +87,29 @@ export async function query<T>(
 ): Promise<T[]> {
   await ensureSchema();
   const { rows } = await getPool().query(text, params as never[]);
-  return rows as T[];
+  // Normalisasi tipe pg -> tipe yang dipakai aplikasi:
+  // - DATE / TIMESTAMPTZ dikembalikan pg sebagai objek Date; React tidak bisa
+  //   me-render objek Date sebagai child dan Next tidak bisa mengirimnya sebagai
+  //   prop ke client component — itu yang membuat Dashboard & /data crash
+  //   ("Application error") begitu ada 1 pengukuran tersimpan.
+  // - NUMERIC dikembalikan pg sebagai string; ubah ke number agar
+  //   perbandingan alarm (tekanan === 0, debit turun >30%) bekerja benar.
+  return (rows as Record<string, unknown>[]).map((row) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (v instanceof Date) {
+        out[k] = k === "date" ? v.toISOString().slice(0, 10) : v.toISOString();
+      } else if (
+        (k === "debit_lps" || k === "pressure_bar" || k === "prev_debit_lps") &&
+        typeof v === "string"
+      ) {
+        out[k] = v === "" ? null : Number(v);
+      } else {
+        out[k] = v;
+      }
+    }
+    return out as T;
+  });
 }
 
 export interface PointRow {

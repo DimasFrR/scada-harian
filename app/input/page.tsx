@@ -28,6 +28,11 @@ export default function InputPage() {
   const [busy, setBusy] = useState(false);
   const [newPoint, setNewPoint] = useState("");
   const [loading, setLoading] = useState(true);
+  // Konfirmasi hapus dua-tahap (bukan confirm() bawaan browser): dialog
+  // bawaan sering ditolak otomatis oleh browser otomatis dan tidak terlihat
+  // jelas di HP — tombol "Hapus" berubah jadi "Yakin hapus?" dulu.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmDeletePointId, setConfirmDeletePointId] = useState<number | null>(null);
 
   const loadPoints = useCallback(async () => {
     const res = await fetch("/api/points");
@@ -114,9 +119,9 @@ export default function InputPage() {
   }
 
   async function deleteRow(id: number) {
-    if (!confirm("Hapus pengukuran ini?")) return;
     const res = await fetch(`/api/measurements?id=${id}`, { method: "DELETE" });
     const data = await res.json();
+    setConfirmDeleteId(null);
     if (data.ok) {
       setMsg({ kind: "ok", text: "Pengukuran dihapus." });
       await loadRows(filterDate);
@@ -144,9 +149,9 @@ export default function InputPage() {
   }
 
   async function deletePoint(id: number, name: string) {
-    if (!confirm(`Hapus titik "${name}" beserta SEMUA pengukurannya?`)) return;
     const res = await fetch(`/api/points?id=${id}`, { method: "DELETE" });
     const data = await res.json();
+    setConfirmDeletePointId(null);
     if (data.ok) {
       setMsg({ kind: "ok", text: `Titik "${name}" dihapus.` });
       await loadPoints();
@@ -265,9 +270,20 @@ export default function InputPage() {
                     <button className="btn btn-secondary" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => editRow(r)}>
                       Ubah
                     </button>{" "}
-                    <button className="btn btn-danger" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => deleteRow(r.id)}>
-                      Hapus
-                    </button>
+                    {confirmDeleteId === r.id ? (
+                      <>
+                        <button className="btn btn-danger" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => deleteRow(r.id)}>
+                          Yakin hapus?
+                        </button>{" "}
+                        <button className="btn btn-secondary" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => setConfirmDeleteId(null)}>
+                          Batal
+                        </button>
+                      </>
+                    ) : (
+                      <button className="btn btn-danger" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => setConfirmDeleteId(r.id)}>
+                        Hapus
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -297,9 +313,20 @@ export default function InputPage() {
         {points.map((p) => (
           <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
             <span>{p.name}</span>
-            <button className="btn btn-danger" style={{ padding: "4px 10px", minHeight: 32, fontSize: 14 }} onClick={() => deletePoint(p.id, p.name)}>
-              Hapus
-            </button>
+            {confirmDeletePointId === p.id ? (
+              <span>
+                <button className="btn btn-danger" style={{ padding: "4px 10px", minHeight: 32, fontSize: 14 }} onClick={() => deletePoint(p.id, p.name)}>
+                  Yakin hapus?
+                </button>{" "}
+                <button className="btn btn-secondary" style={{ padding: "4px 10px", minHeight: 32, fontSize: 14 }} onClick={() => setConfirmDeletePointId(null)}>
+                  Batal
+                </button>
+              </span>
+            ) : (
+              <button className="btn btn-danger" style={{ padding: "4px 10px", minHeight: 32, fontSize: 14 }} onClick={() => setConfirmDeletePointId(p.id)}>
+                Hapus
+              </button>
+            )}
           </div>
         ))}
       </div>
