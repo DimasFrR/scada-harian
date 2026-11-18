@@ -23,11 +23,12 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Setup JDK 17
+      - name: Setup JDK 21
+        # Capacitor 7 butuh JDK 21 (source release 21); JDK 17 gagal compile.
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Setup Android SDK (pakai SDK bawaan runner ubuntu)
         # android-actions/setup-android@v3 gagal: memanggil `sdkmanager tools`
