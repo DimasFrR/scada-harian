@@ -26,6 +26,8 @@ export default function TrenPage() {
         } else {
           setError(data.error || "Gagal memuat titik ukur.");
         }
+      } catch {
+        setError("Gagal memuat titik ukur — periksa koneksi, lalu login ulang bila perlu.");
       } finally {
         setLoadingPoints(false);
       }
@@ -48,6 +50,8 @@ export default function TrenPage() {
         } else {
           setError(data.error || "Gagal memuat data.");
         }
+      } catch {
+        setError("Gagal memuat data — periksa koneksi, lalu login ulang bila perlu.");
       } finally {
         setLoadingRows(false);
       }

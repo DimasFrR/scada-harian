@@ -45,6 +45,8 @@ export default function InputPage() {
       const data = await res.json();
       if (data.ok) setPoints(data.points);
       else setMsg({ kind: "err", text: data.error || "Gagal memuat titik ukur." });
+    } catch {
+      setMsg({ kind: "err", text: "Gagal memuat titik ukur — periksa koneksi, lalu login ulang bila perlu." });
     } finally {
       setLoadingPoints(false);
     }
@@ -57,6 +59,8 @@ export default function InputPage() {
       const data = await res.json();
       if (data.ok) setRows(data.measurements);
       else setMsg({ kind: "err", text: data.error || "Gagal memuat data." });
+    } catch {
+      setMsg({ kind: "err", text: "Gagal memuat data — periksa koneksi, lalu login ulang bila perlu." });
     } finally {
       setLoadingRows(false);
     }

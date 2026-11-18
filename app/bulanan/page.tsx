@@ -53,6 +53,11 @@ export default function BulananPage() {
       const data = await res.json();
       if (data.ok) setRows(data.months);
       else setMsg({ kind: "err", text: data.error || "Gagal memuat data bulanan." });
+    } catch {
+      // Jangan tampilkan tabel kosong seolah-olah tidak ada data — kalau
+      // fetch gagal (mis. sesi habis sehingga API melempar ke halaman
+      // login), beri tahu user, bukan "Belum ada data bulanan."
+      setMsg({ kind: "err", text: "Gagal memuat data bulanan — periksa koneksi, lalu login ulang bila perlu." });
     } finally {
       setLoadingRows(false);
     }
