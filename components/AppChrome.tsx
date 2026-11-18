@@ -10,6 +10,18 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLogin = pathname === "/login";
 
+  async function logout() {
+    // POST, bukan <Link>: <Link> ke /api/logout dulu me-prefetch GET dan
+    // menghapus sesi sendiri (lihat app/api/logout/route.ts).
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      // Tetap arahkan ke login walau request gagal — sesi server sudah
+      // tidak bisa dipakai lagi bila cookie ikut terhapus.
+    }
+    window.location.href = "/login";
+  }
+
   return (
     <>
       <header className="topbar">
@@ -22,9 +34,9 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           {!isLogin && (
-            <Link href="/api/logout" className="logout-btn">
+            <button type="button" className="logout-btn" onClick={logout}>
               Keluar
-            </Link>
+            </button>
           )}
         </div>
       </header>
