@@ -302,7 +302,7 @@ export default function InputPage() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )))}
               {!loadingRows && rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="muted">
