@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 export default function LoginForm({ notConfigured }: { notConfigured: boolean }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
   const search = useSearchParams();
   const next = search.get("next") || "/";
 
@@ -23,8 +22,13 @@ export default function LoginForm({ notConfigured }: { notConfigured: boolean })
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        router.push(next);
-        router.refresh();
+        // Navigasi penuh (bukan router.push): cookie sesi yang baru diset
+        // dijamin ikut terkirim pada request dokumen berikutnya, jadi
+        // middleware langsung mengenali sesi dan tidak melempar balik ke
+        // halaman login. router.push + router.refresh sebelumnya sering
+        // balapan dengan cookie sehingga login pertama "nyangkut" dan
+        // baru masuk di percobaan kedua.
+        window.location.href = next;
       } else {
         setError(data.error || "Password salah.");
       }
