@@ -82,7 +82,10 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1>Dashboard</h1>
+      <div style={{ textAlign: "center", marginBottom: 4 }}>
+        <img src="/logo.png" alt="Logo Tirta Sukapura" width={96} height={96} style={{ borderRadius: "50%" }} />
+      </div>
+      <h1 style={{ textAlign: "center" }}>Dashboard</h1>
       <p className="lead">Pengukuran terbaru tiap titik + alarm otomatis.</p>
 
       <div className="kpi-grid">

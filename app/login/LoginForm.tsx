@@ -41,6 +41,9 @@ export default function LoginForm({ notConfigured }: { notConfigured: boolean })
 
   return (
     <div className="card login-card">
+      <div style={{ textAlign: "center", marginBottom: 8 }}>
+        <img src="/logo.png" alt="Logo Tirta Sukapura" width={84} height={84} style={{ borderRadius: "50%" }} />
+      </div>
       <h1>Login SCADA Harian</h1>
       <p className="lead">Perumda Air Minum Tirta Sukapura</p>
       {notConfigured ? (

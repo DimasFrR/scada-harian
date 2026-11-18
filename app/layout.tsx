@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   description:
     "Dashboard monitoring debit & tekanan harian Perumda Air Minum Tirta Sukapura",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/logo.png", apple: "/logo.png" },
 };
 
 export const viewport: Viewport = {
@@ -25,9 +26,12 @@ export default function RootLayout({
       <body>
         <header className="topbar">
           <div className="topbar-inner">
-            <div>
-              <div className="brand">SCADA Harian</div>
-              <div className="brand-sub">Perumda Air Minum Tirta Sukapura</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <img src="/logo.png" alt="Logo Tirta Sukapura" width={44} height={44} style={{ borderRadius: "50%", flexShrink: 0 }} />
+              <div>
+                <div className="brand">SCADA Harian</div>
+                <div className="brand-sub">Perumda Air Minum Tirta Sukapura</div>
+              </div>
             </div>
             <Link href="/api/logout" className="logout-btn">
               Keluar
