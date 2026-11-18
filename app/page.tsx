@@ -1,8 +1,15 @@
 import Link from "next/link";
 import PdfButton, { type PdfAlarm, type PdfRow } from "@/components/PdfButton";
 import PrintButton from "@/components/PrintButton";
-import { computeAlarm, formatID, formatNum } from "@/lib/alarms";
-import { DbNotConfigured, getLatestPerPoint, getPoints, isDbConfigured } from "@/lib/db";
+import { computeAlarm, formatID, formatNum, monthNameID } from "@/lib/alarms";
+import {
+  DbNotConfigured,
+  getLatestMonthlyBilled,
+  getLatestPerPoint,
+  getPoints,
+  isDbConfigured,
+  type MonthlyBilledRow,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +36,13 @@ export default async function DashboardPage() {
 
   let latest: Awaited<ReturnType<typeof getLatestPerPoint>> = [];
   let points: Awaited<ReturnType<typeof getPoints>> = [];
+  let latestMonthly: MonthlyBilledRow | null = null;
   try {
-    [latest, points] = await Promise.all([getLatestPerPoint(), getPoints()]);
+    [latest, points, latestMonthly] = await Promise.all([
+      getLatestPerPoint(),
+      getPoints(),
+      getLatestMonthlyBilled(),
+    ]);
   } catch (e) {
     if (e instanceof DbNotConfigured) {
       return (
@@ -176,22 +188,60 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <BilledPanel />
+      <BilledPanel row={latestMonthly} />
     </div>
   );
 }
 
-function BilledPanel() {
+function BilledPanel({ row }: { row?: MonthlyBilledRow | null }) {
+  // row === undefined: DB belum dikonfigurasi — tampilkan Oktober 2026
+  // (angka terverifikasi) sebagai info statis. row === null: DB kosong.
+  if (row === undefined) {
+    return (
+      <div className="card">
+        <h3>Volume Tertagih — Oktober 2026</h3>
+        <p>
+          <b>{formatID(49102)} SL</b> · <b>{formatID(683735)} m³</b> ·{" "}
+          <b>Rp {formatID(6957377800)}</b>
+        </p>
+        <p className="muted">Sumber: Lap DRD Rekapitulasi Global · 18 cabang.</p>
+        <p>
+          NRW: <b>Menunggu data produksi IPA</b>
+        </p>
+      </div>
+    );
+  }
+  if (row === null) {
+    return (
+      <div className="card">
+        <h3>Volume Tertagih</h3>
+        <p className="muted">
+          Belum ada data bulanan. Isi dari menu{" "}
+          <Link href="/bulanan">Bulanan</Link>.
+        </p>
+        <p>
+          NRW: <b>Menunggu data produksi IPA</b>
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="card">
-      <h3>Volume Tertagih — Oktober 2026</h3>
+      <h3>Volume Tertagih — {monthNameID(row.month)}</h3>
       <p>
-        <b>{formatID(49102)} SL</b> · <b>{formatID(683735)} m³</b> ·{" "}
-        <b>Rp {formatID(6957377800)}</b>
+        <b>{formatID(row.sl)} SL</b> · <b>{formatID(row.m3)} m³</b> ·{" "}
+        <b>Rp {formatID(row.total_rp)}</b>
       </p>
-      <p className="muted">Tervalidasi 18/18 cabang (DRD = DSML, selisih 0).</p>
+      <p className="muted">
+        Harga Air Rp {formatID(row.harga_air)} + Materai Rp {formatID(row.materai)}
+        {row.branches ? ` · ${row.branches} cabang` : ""}
+        {row.note ? ` · ${row.note}` : ""}
+      </p>
       <p>
         NRW: <b>Menunggu data produksi IPA</b>
+      </p>
+      <p>
+        <Link href="/bulanan">Ubah / tambah data bulanan →</Link>
       </p>
     </div>
   );

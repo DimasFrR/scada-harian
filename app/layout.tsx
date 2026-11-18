@@ -52,6 +52,10 @@ export default function RootLayout({
             <span className="nav-ico">↗</span>
             <span>Tren</span>
           </Link>
+          <Link href="/bulanan" className="nav-item">
+            <span className="nav-ico">▤</span>
+            <span>Bulanan</span>
+          </Link>
         </nav>
       </body>
     </html>

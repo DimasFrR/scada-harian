@@ -75,6 +75,18 @@ export function parseIDNumber(raw: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** "2026-10" -> "Oktober 2026" */
+export function monthNameID(month: string): string {
+  const names = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+  ];
+  const [y, m] = month.split("-");
+  const n = Number(m);
+  if (!y || !n || n < 1 || n > 12) return month;
+  return `${names[n - 1]} ${y}`;
+}
+
 /** Tanggal + jam saat ini dalam WIB (Asia/Jakarta), format input HTML. */
 export function nowWIB(): { date: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {

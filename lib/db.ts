@@ -61,6 +61,32 @@ export async function ensureSchema(): Promise<void> {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
+      // Volume tertagih bulanan (dari Lap DRD billing) — diisi lewat menu
+      // Bulanan, jadi panel Dashboard tidak lagi hardcode per bulan.
+      await p.query(`
+        CREATE TABLE IF NOT EXISTS monthly_billed (
+          month TEXT PRIMARY KEY,
+          sl INTEGER NOT NULL,
+          m3 NUMERIC NOT NULL,
+          harga_air BIGINT NOT NULL,
+          materai BIGINT NOT NULL DEFAULT 0,
+          branches INTEGER NULL,
+          note TEXT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+      // Seed Oktober 2026 (terverifikasi dari Lap DRD Excel, 18 Nov 2026)
+      // — hanya bila tabel masih kosong.
+      const { rows: mb } = await p.query<{ c: string }>(
+        "SELECT COUNT(*)::text AS c FROM monthly_billed",
+      );
+      if (Number(mb[0].c) === 0) {
+        await p.query(
+          `INSERT INTO monthly_billed (month, sl, m3, harga_air, materai, branches, note)
+           VALUES ('2026-10', 49102, 683735, 6957137800, 240000, 18, 'Lap DRD Rekapitulasi Global')
+           ON CONFLICT (month) DO NOTHING`,
+        );
+      }
       // Seed 29 titik kanonis — hanya bila tabel masih kosong.
       const { rows } = await p.query<{ c: string }>(
         "SELECT COUNT(*)::text AS c FROM points",
@@ -100,7 +126,14 @@ export async function query<T>(
       if (v instanceof Date) {
         out[k] = k === "date" ? v.toISOString().slice(0, 10) : v.toISOString();
       } else if (
-        (k === "debit_lps" || k === "pressure_bar" || k === "prev_debit_lps") &&
+        (k === "debit_lps" ||
+          k === "pressure_bar" ||
+          k === "prev_debit_lps" ||
+          k === "m3" ||
+          k === "sl" ||
+          k === "harga_air" ||
+          k === "materai" ||
+          k === "total_rp") &&
         typeof v === "string"
       ) {
         out[k] = v === "" ? null : Number(v);
@@ -151,6 +184,58 @@ export async function getLatestPerPoint(): Promise<
      )
      SELECT * FROM ranked WHERE rn = 1 ORDER BY point_sort ASC`,
   );
+}
+
+export interface MonthlyBilledRow {
+  month: string; // YYYY-MM
+  sl: number;
+  m3: number;
+  harga_air: number;
+  materai: number;
+  total_rp: number;
+  branches: number | null;
+  note: string | null;
+  updated_at: string;
+}
+
+const MONTHLY_SELECT =
+  `SELECT month, sl, m3, harga_air, materai, harga_air + materai AS total_rp,
+          branches, note, updated_at FROM monthly_billed`;
+
+/** Volume tertagih bulan terbaru (untuk panel Dashboard). */
+export async function getLatestMonthlyBilled(): Promise<MonthlyBilledRow | null> {
+  const rows = await query<MonthlyBilledRow>(`${MONTHLY_SELECT} ORDER BY month DESC LIMIT 1`);
+  return rows[0] ?? null;
+}
+
+/** Semua bulan, terbaru dulu (untuk halaman Bulanan). */
+export async function getMonthlyBilledList(): Promise<MonthlyBilledRow[]> {
+  return query<MonthlyBilledRow>(`${MONTHLY_SELECT} ORDER BY month DESC`);
+}
+
+/** Simpan / perbarui satu bulan (upsert berdasar month). */
+export async function upsertMonthlyBilled(r: {
+  month: string;
+  sl: number;
+  m3: number;
+  harga_air: number;
+  materai: number;
+  branches: number | null;
+  note: string | null;
+}): Promise<void> {
+  await query(
+    `INSERT INTO monthly_billed (month, sl, m3, harga_air, materai, branches, note, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+     ON CONFLICT (month) DO UPDATE SET
+       sl = EXCLUDED.sl, m3 = EXCLUDED.m3, harga_air = EXCLUDED.harga_air,
+       materai = EXCLUDED.materai, branches = EXCLUDED.branches,
+       note = EXCLUDED.note, updated_at = NOW()`,
+    [r.month, r.sl, r.m3, r.harga_air, r.materai, r.branches, r.note],
+  );
+}
+
+export async function deleteMonthlyBilled(month: string): Promise<void> {
+  await query(`DELETE FROM monthly_billed WHERE month = $1`, [month]);
 }
 
 export async function getMeasurements(filter: {
