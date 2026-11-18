@@ -25,7 +25,7 @@ body {
   color: var(--text);
   font-size: 16px;
   line-height: 1.5;
-  padding-bottom: 72px; /* ruang untuk bottom nav */
+  padding-bottom: 88px; /* ruang untuk bottom nav (yang kini lebih tinggi karena safe-area) */
 }
 
 a { color: var(--teal); text-decoration: none; }
@@ -38,6 +38,9 @@ a:hover { text-decoration: underline; }
   position: sticky;
   top: 0;
   z-index: 20;
+  /* Jarak dari status bar / kamera depan (dynamic island): tanpa ini
+     judul ketutup status bar HP di tampilan edge-to-edge. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 .topbar-inner {
   max-width: 760px;
@@ -161,11 +164,14 @@ tr.clickable { cursor: pointer; }
   border-top: 1px solid var(--border);
   display: flex;
   z-index: 20;
+  /* Naik di atas bilah gestur Android (back/home): tanpa ini nav mentok
+     ke ujung bawah layar dan bentrok sama tombol sistem HP. */
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 }
 .nav-item {
   flex: 1;
   display: flex; flex-direction: column; align-items: center;
-  padding: 8px 0 10px;
+  padding: 8px 0 2px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
