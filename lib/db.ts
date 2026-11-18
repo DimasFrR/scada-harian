@@ -41,6 +41,9 @@ export async function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
       const p = getPool();
+      // Satu round-trip untuk ketiga tabel (dulu 3 query terpisah) —
+      // penting karena tiap query ke Neon yang lagi "tidur" (free tier
+      // suspend setelah ~5 menit idle) kena biaya wake-up per query.
       await p.query(`
         CREATE TABLE IF NOT EXISTS points (
           id SERIAL PRIMARY KEY,
@@ -48,8 +51,6 @@ export async function ensureSchema(): Promise<void> {
           sort_order INTEGER NOT NULL DEFAULT 0,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-      `);
-      await p.query(`
         CREATE TABLE IF NOT EXISTS measurements (
           id SERIAL PRIMARY KEY,
           point_id INTEGER NOT NULL REFERENCES points(id) ON DELETE CASCADE,
@@ -60,10 +61,6 @@ export async function ensureSchema(): Promise<void> {
           is_empty BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-      `);
-      // Volume tertagih bulanan (dari Lap DRD billing) — diisi lewat menu
-      // Bulanan, jadi panel Dashboard tidak lagi hardcode per bulan.
-      await p.query(`
         CREATE TABLE IF NOT EXISTS monthly_billed (
           month TEXT PRIMARY KEY,
           sl INTEGER NOT NULL,
@@ -75,12 +72,16 @@ export async function ensureSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
+      // Satu query untuk kedua hitungan seed (dulu 2 query terpisah).
+      const { rows: counts } = await p.query<{ mb: string; p: string }>(
+        `SELECT (SELECT COUNT(*)::text FROM monthly_billed) AS mb,
+                (SELECT COUNT(*)::text FROM points) AS p`,
+      );
+      const mbCount = Number(counts[0].mb);
+      const pointsCount = Number(counts[0].p);
       // Seed Oktober 2026 (terverifikasi dari Lap DRD Excel, 18 Nov 2026)
       // — hanya bila tabel masih kosong.
-      const { rows: mb } = await p.query<{ c: string }>(
-        "SELECT COUNT(*)::text AS c FROM monthly_billed",
-      );
-      if (Number(mb[0].c) === 0) {
+      if (mbCount === 0) {
         await p.query(
           `INSERT INTO monthly_billed (month, sl, m3, harga_air, materai, branches, note)
            VALUES ('2026-10', 49102, 683735, 6957137800, 240000, 18, 'Lap DRD Rekapitulasi Global')
@@ -88,10 +89,7 @@ export async function ensureSchema(): Promise<void> {
         );
       }
       // Seed 29 titik kanonis — hanya bila tabel masih kosong.
-      const { rows } = await p.query<{ c: string }>(
-        "SELECT COUNT(*)::text AS c FROM points",
-      );
-      if (Number(rows[0].c) === 0) {
+      if (pointsCount === 0) {
         for (let i = 0; i < POINTS.length; i++) {
           await p.query(
             "INSERT INTO points (name, sort_order) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING",

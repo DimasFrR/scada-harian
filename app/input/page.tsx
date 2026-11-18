@@ -27,7 +27,11 @@ export default function InputPage() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [newPoint, setNewPoint] = useState("");
-  const [loading, setLoading] = useState(true);
+  // Loading per bagian, bukan satu gate untuk seluruh halaman: dulu halaman
+  // cuma menampilkan "Memuat..." sampai titik + data selesai dimuat
+  // berurutan, padahal form-nya bisa langsung tampil dan diisi.
+  const [loadingPoints, setLoadingPoints] = useState(true);
+  const [loadingRows, setLoadingRows] = useState(true);
   // Konfirmasi hapus dua-tahap (bukan confirm() bawaan browser): dialog
   // bawaan sering ditolak otomatis oleh browser otomatis dan tidak terlihat
   // jelas di HP — tombol "Hapus" berubah jadi "Yakin hapus?" dulu.
@@ -35,26 +39,33 @@ export default function InputPage() {
   const [confirmDeletePointId, setConfirmDeletePointId] = useState<number | null>(null);
 
   const loadPoints = useCallback(async () => {
-    const res = await fetch("/api/points");
-    const data = await res.json();
-    if (data.ok) setPoints(data.points);
-    else setMsg({ kind: "err", text: data.error || "Gagal memuat titik ukur." });
+    setLoadingPoints(true);
+    try {
+      const res = await fetch("/api/points");
+      const data = await res.json();
+      if (data.ok) setPoints(data.points);
+      else setMsg({ kind: "err", text: data.error || "Gagal memuat titik ukur." });
+    } finally {
+      setLoadingPoints(false);
+    }
   }, []);
 
   const loadRows = useCallback(async (date: string) => {
-    const res = await fetch(`/api/measurements?date=${date}`);
-    const data = await res.json();
-    if (data.ok) setRows(data.measurements);
-    else setMsg({ kind: "err", text: data.error || "Gagal memuat data." });
+    setLoadingRows(true);
+    try {
+      const res = await fetch(`/api/measurements?date=${date}`);
+      const data = await res.json();
+      if (data.ok) setRows(data.measurements);
+      else setMsg({ kind: "err", text: data.error || "Gagal memuat data." });
+    } finally {
+      setLoadingRows(false);
+    }
   }, []);
 
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await loadPoints();
-      await loadRows(filterDate);
-      setLoading(false);
-    })();
+    // Paralel (dulu berurutan: titik dulu, baru data) — dan form langsung
+    // tampil, tidak menunggu keduanya selesai.
+    void Promise.all([loadPoints(), loadRows(filterDate)]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -161,8 +172,6 @@ export default function InputPage() {
     }
   }
 
-  if (loading) return <p className="muted">Memuat...</p>;
-
   return (
     <div>
       <h1>Input Ukur</h1>
@@ -187,8 +196,8 @@ export default function InputPage() {
         </button>
 
         <label htmlFor="point">Titik Ukur</label>
-        <select id="point" value={form.point_id} onChange={(e) => setForm({ ...form, point_id: e.target.value })} required>
-          <option value="">— Pilih titik —</option>
+        <select id="point" value={form.point_id} onChange={(e) => setForm({ ...form, point_id: e.target.value })} required disabled={loadingPoints}>
+          <option value="">{loadingPoints ? "Memuat titik..." : "— Pilih titik —"}</option>
           {points.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -257,7 +266,14 @@ export default function InputPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {loadingRows ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    Memuat data...
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => (
                 <tr key={r.id}>
                   <td>
                     <b>{r.point_name}</b>
@@ -287,7 +303,7 @@ export default function InputPage() {
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 && (
+              {!loadingRows && rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="muted">
                     Belum ada pengukuran pada tanggal ini.
