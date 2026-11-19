@@ -81,7 +81,7 @@ export default function PdfButton({ rows, title, subtitle }: Props) {
         year: "numeric",
       }).formatToParts(new Date());
       const get = (t: string) => nowParts.find((p) => p.type === t)?.value ?? "";
-      const dateLine = `${SIGNER_PLACE}, ${MONTHS_ID[Number(get("month")) - 1]} ${get("year")}`;
+      const dateLine = `${SIGNER_PLACE}, ${get("day")} ${MONTHS_ID[Number(get("month")) - 1]} ${get("year")}`;
 
       // --- Kop surat ---
       const logoData = await toDataUrl("/logo.png");
