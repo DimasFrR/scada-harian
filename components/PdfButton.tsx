@@ -20,16 +20,22 @@ export interface PdfAlarm {
 
 interface Props {
   rows: PdfRow[];
+  // alarms dipakai di layar (Dashboard), TIDAK dicetak di PDF — laporan print hanya tabel data
   alarms: PdfAlarm[];
   title: string;
   subtitle?: string;
 }
 
-// Penandatangan laporan (format surat resmi Perumda)
+// Penandatangan laporan — format surat biasa, ditandatangani manual setelah print
 const SIGNER_PLACE = "Tasikmalaya";
-const SIGNER_ROLE = "Kepala Sub Bagian Transmisi dan Distribusi";
-const SIGNER_NAME = "JONI KUSWARA, S.Sos";
-const SIGNER_NUP = "NUP. 0 3 0 4";
+const LEFT_HEAD = "Mengetahui/Menyetujui,";
+const LEFT_ROLE = "Kepala Bagian Transmisi dan Distribusi";
+const LEFT_NAME = "CECEP WENDI SETIADI, S.IP";
+const LEFT_NUP = "NUP. 0 2 2 1";
+const RIGHT_HEAD = "Dibuat Oleh,";
+const RIGHT_ROLE = "Kepala Sub Bagian Transmisi dan Distribusi";
+const RIGHT_NAME = "JONI KUSWARA, S.Sos";
+const RIGHT_NUP = "NUP. 0 3 0 4";
 
 const MONTHS_ID = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -52,8 +58,8 @@ async function toDataUrl(path: string): Promise<string | null> {
   }
 }
 
-/** Tombol Download PDF — laporan format surat resmi (kop + ttd atasan otomatis). */
-export default function PdfButton({ rows, alarms, title, subtitle }: Props) {
+/** Tombol Download PDF — laporan format surat resmi (kop + tabel data + 2 blok ttd manual). */
+export default function PdfButton({ rows, title, subtitle }: Props) {
   const [busy, setBusy] = useState(false);
 
   async function download() {
@@ -78,10 +84,7 @@ export default function PdfButton({ rows, alarms, title, subtitle }: Props) {
       const dateLine = `${SIGNER_PLACE}, ${MONTHS_ID[Number(get("month")) - 1]} ${get("year")}`;
 
       // --- Kop surat ---
-      const [logoData, ttdData] = await Promise.all([
-        toDataUrl("/logo.png"),
-        toDataUrl("/ttd-atasan.png"),
-      ]);
+      const logoData = await toDataUrl("/logo.png");
       if (logoData) {
         try {
           doc.addImage(logoData, "PNG", M, 10, 20, 20);
@@ -114,32 +117,7 @@ export default function PdfButton({ rows, alarms, title, subtitle }: Props) {
       }
       y += 2;
 
-      // --- Ringkasan alarm ---
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text("Ringkasan Alarm", M, y);
-      y += 4;
-      if (alarms.length === 0) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(10);
-        doc.text("Tidak ada alarm aktif — semua titik normal.", M, y + 4);
-        y += 10;
-      } else {
-        autoTable(doc, {
-          startY: y,
-          head: [["Titik", "Level", "Keterangan"]],
-          body: alarms.map((a) => [
-            a.point_name,
-            a.level === "critical" ? "KRITIS" : "PERINGATAN",
-            a.reasons.join("; "),
-          ]),
-          styles: { fontSize: 9 },
-          headStyles: { fillColor: [14, 116, 144] },
-        });
-        y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
-      }
-
-      // --- Tabel data ---
+      // --- Tabel data (tanpa Ringkasan Alarm) ---
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.text(`Data Pengukuran (${rows.length} baris)`, M, y);
@@ -165,46 +143,38 @@ export default function PdfButton({ rows, alarms, title, subtitle }: Props) {
           5: { cellWidth: 26 },
         },
       });
-      y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+      y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
 
-      // --- Blok tanda tangan (kanan, format surat) ---
-      // Butuh ~70mm; pindah halaman baru kalau tidak muat
-      const blockH = 70;
+      // --- Dua blok tanda tangan (kosong, ditandatangani manual setelah print) ---
+      // Butuh ~60mm; pindah halaman baru kalau tidak muat
+      const blockH = 60;
       if (y + blockH > 297 - M) {
         doc.addPage();
         y = 20;
       }
-      const bx = M + (W - 2 * M) * 0.55; // tengah blok kanan
-      const bw = (W - 2 * M) * 0.45;
+      const colW = 85;
+      const leftCx = M + 45;
+      const rightCx = W - M - 45;
+      const leftHead = [LEFT_HEAD, ...doc.splitTextToSize(LEFT_ROLE, colW)];
+      const rightHead = [dateLine, RIGHT_HEAD, ...doc.splitTextToSize(RIGHT_ROLE, colW)];
+      const headH = Math.max(leftHead.length, rightHead.length) * 5;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-      doc.text(dateLine, bx, y, { align: "center" });
-      y += 6;
-      doc.text("Diketahui Oleh,", bx, y, { align: "center" });
-      y += 6;
-      const roleLines = doc.splitTextToSize(SIGNER_ROLE, bw);
-      doc.text(roleLines, bx, y, { align: "center" });
-      y += roleLines.length * 5 + 2;
-      if (ttdData) {
-        try {
-          const tw = 42;
-          const th = (tw * 576) / 800;
-          doc.addImage(ttdData, "PNG", bx - tw / 2, y, tw, th);
-          y += th + 2;
-        } catch {
-          y += 24;
-        }
-      } else {
-        y += 24;
-      }
+      leftHead.forEach((ln, i) => doc.text(ln, leftCx, y + i * 5, { align: "center" }));
+      rightHead.forEach((ln, i) => doc.text(ln, rightCx, y + i * 5, { align: "center" }));
+      // ruang kosong ~25mm buat tanda tangan manual
+      const nameY = y + headH + 2 + 25;
       doc.setFont("helvetica", "bold");
-      doc.text(SIGNER_NAME, bx, y, { align: "center" });
-      const nw = doc.getTextWidth(SIGNER_NAME);
+      doc.text(LEFT_NAME, leftCx, nameY, { align: "center" });
+      doc.text(RIGHT_NAME, rightCx, nameY, { align: "center" });
+      const lw = doc.getTextWidth(LEFT_NAME);
+      const rw = doc.getTextWidth(RIGHT_NAME);
       doc.setLineWidth(0.4);
-      doc.line(bx - nw / 2, y + 1, bx + nw / 2, y + 1);
-      y += 6;
+      doc.line(leftCx - lw / 2, nameY + 1, leftCx + lw / 2, nameY + 1);
+      doc.line(rightCx - rw / 2, nameY + 1, rightCx + rw / 2, nameY + 1);
       doc.setFont("helvetica", "normal");
-      doc.text(SIGNER_NUP, bx, y, { align: "center" });
+      doc.text(LEFT_NUP, leftCx, nameY + 6, { align: "center" });
+      doc.text(RIGHT_NUP, rightCx, nameY + 6, { align: "center" });
 
       const stamp = new Date().toISOString().slice(0, 10);
       doc.save(`scada-harian-${stamp}.pdf`);
