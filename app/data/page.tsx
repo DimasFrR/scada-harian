@@ -129,6 +129,7 @@ export default async function DataPage({ searchParams }: Props) {
                 <th>Titik</th>
                 <th className="num">Debit (L/dtk)</th>
                 <th className="num">Tekanan (bar)</th>
+                <th>Foto</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -145,6 +146,15 @@ export default async function DataPage({ searchParams }: Props) {
                     <td className="num">{formatNum(r.debit_lps)}</td>
                     <td className="num">{formatNum(r.pressure_bar)}</td>
                     <td>
+                      {r.photo_url ? (
+                        <a href={r.photo_url} target="_blank" rel="noreferrer">
+                          <img src={r.photo_url} alt="Foto" width={48} height={48} style={{ objectFit: "cover", borderRadius: 6, display: "block" }} />
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
                       {r.is_empty && <span className="badge empty">KOSONG</span>}
                       {a.level === "critical" && !r.is_empty && <span className="badge critical">KRITIS</span>}
                       {a.level === "warning" && <span className="badge warning">PERINGATAN</span>}
@@ -155,7 +165,7 @@ export default async function DataPage({ searchParams }: Props) {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="muted">
+                  <td colSpan={7} className="muted">
                     Tidak ada data untuk filter ini.{" "}
                     <Link href={qs("", "")}>Tampilkan semua</Link>
                   </td>

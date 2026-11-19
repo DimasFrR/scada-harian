@@ -71,6 +71,15 @@ export async function ensureSchema(): Promise<void> {
           note TEXT NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        -- Foto bukti pengukuran (1 foto per pengukuran, URL Vercel Blob).
+        -- ALTER terpisah karena tabel measurements sudah ada di production.
+        ALTER TABLE measurements ADD COLUMN IF NOT EXISTS photo_url TEXT;
+        -- Dedup kirim alarm WA: 1 baris = 1 alarm sudah dikirim untuk 1 pengukuran.
+        CREATE TABLE IF NOT EXISTS alarm_notifications (
+          measurement_id INTEGER PRIMARY KEY REFERENCES measurements(id) ON DELETE CASCADE,
+          level TEXT NOT NULL,
+          sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
       `);
       // Satu query untuk kedua hitungan seed (dulu 2 query terpisah).
       const { rows: counts } = await p.query<{ mb: string; p: string }>(
@@ -158,6 +167,7 @@ export interface MeasurementRow {
   debit_lps: number | null;
   pressure_bar: number | null;
   is_empty: boolean;
+  photo_url: string | null;
   created_at: string;
 }
 

@@ -37,6 +37,12 @@ export default function InputPage() {
   // jelas di HP — tombol "Hapus" berubah jadi "Yakin hapus?" dulu.
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [confirmDeletePointId, setConfirmDeletePointId] = useState<number | null>(null);
+  // Foto bukti (1 foto per pengukuran). photoEnabled dicek ke /api/photos:
+  // null = belum tahu, false = Blob belum dikonfigurasi (fitur nonaktif,
+  // form tetap bisa disimpan tanpa foto), true = aktif.
+  const [photoEnabled, setPhotoEnabled] = useState<boolean | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const loadPoints = useCallback(async () => {
     setLoadingPoints(true);
@@ -70,6 +76,10 @@ export default function InputPage() {
     // Paralel (dulu berurutan: titik dulu, baru data) — dan form langsung
     // tampil, tidak menunggu keduanya selesai.
     void Promise.all([loadPoints(), loadRows(filterDate)]);
+    fetch("/api/photos")
+      .then((r) => r.json())
+      .then((d) => setPhotoEnabled(d.enabled === true))
+      .catch(() => setPhotoEnabled(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,6 +90,77 @@ export default function InputPage() {
   function setNow() {
     const wib = nowWIB();
     setForm((f) => ({ ...f, date: wib.date, time: wib.time }));
+  }
+
+  // Kompres foto di HP sebelum diunggah: sisi terpanjang maks 1280px,
+  // JPEG kualitas 70. createImageBitmap menangani orientasi EXIF (foto
+  // tegak dari kamera HP tidak jadi miring); fallback ke <img> bila
+  // browser tidak mendukung.
+  async function compressImage(file: File): Promise<Blob> {
+    const MAX = 1280;
+    const toBlob = (canvas: HTMLCanvasElement) =>
+      new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("Gagal mengompres foto."))),
+          "image/jpeg",
+          0.7,
+        );
+      });
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null);
+    if (bitmap) {
+      const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Gagal memproses foto.");
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      return toBlob(canvas);
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error("Gagal membaca foto."));
+        im.src = url;
+      });
+      const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Gagal memproses foto.");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return toBlob(canvas);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // boleh pilih file yang sama lagi
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const blob = await compressImage(file);
+      const fd = new FormData();
+      fd.append("file", blob, "foto.jpg");
+      const res = await fetch("/api/photos", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Gagal mengunggah foto.");
+      setPhotoUrl(data.url);
+    } catch (err) {
+      setMsg({ kind: "err", text: err instanceof Error ? err.message : "Gagal mengunggah foto." });
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  function clearPhoto() {
+    setPhotoUrl(null);
   }
 
   async function submit(e: React.FormEvent) {
@@ -101,6 +182,7 @@ export default function InputPage() {
         debit_lps: debit,
         pressure_bar: pressure,
         is_empty: form.is_empty,
+        photo_url: photoUrl,
       };
       const res = await fetch("/api/measurements", {
         method: form.id ? "PUT" : "POST",
@@ -111,6 +193,7 @@ export default function InputPage() {
       if (!res.ok || !data.ok) throw new Error(data.error || "Gagal menyimpan.");
       setMsg({ kind: "ok", text: form.id ? "Pengukuran diperbarui." : "Pengukuran tersimpan." });
       setForm((f) => ({ ...emptyForm(), point_id: f.point_id }));
+      setPhotoUrl(null);
       setFilterDate(form.date);
       await loadRows(form.date);
     } catch (err) {
@@ -130,6 +213,7 @@ export default function InputPage() {
       pressure: r.pressure_bar === null ? "" : String(r.pressure_bar).replace(".", ","),
       is_empty: r.is_empty,
     });
+    setPhotoUrl(r.photo_url ?? null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -242,12 +326,40 @@ export default function InputPage() {
           <label htmlFor="kosong">Kosong — tidak ada air / tidak ada tekanan</label>
         </div>
 
+        <label htmlFor="photo">Foto meter / titik (opsional, maks 1 foto)</label>
+        {photoEnabled === false ? (
+          <p className="hint">Fitur foto belum diaktifkan — penyimpanan foto (Vercel Blob) belum diatur. Pengukuran tetap bisa disimpan tanpa foto.</p>
+        ) : (
+          <>
+            <input
+              id="photo"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={onPhotoChange}
+              disabled={photoUploading}
+            />
+            <p className="hint">Foto diambil dari kamera HP, otomatis dikompres (maks 1280px) sebelum diunggah.</p>
+            {photoUploading && <p className="muted">Mengunggah foto...</p>}
+            {photoUrl && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <a href={photoUrl} target="_blank" rel="noreferrer">
+                  <img src={photoUrl} alt="Foto pengukuran" width={96} height={96} style={{ objectFit: "cover", borderRadius: 8 }} />
+                </a>
+                <button type="button" className="btn btn-secondary" onClick={clearPhoto}>
+                  Hapus foto
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
         <div className="btn-row">
           <button className="btn" type="submit" disabled={busy}>
             {busy ? "Menyimpan..." : form.id ? "Simpan Perubahan" : "Simpan Pengukuran"}
           </button>
           {form.id && (
-            <button type="button" className="btn btn-secondary" onClick={() => setForm(emptyForm())}>
+            <button type="button" className="btn btn-secondary" onClick={() => { setForm(emptyForm()); setPhotoUrl(null); }}>
               Batal
             </button>
           )}
@@ -266,13 +378,14 @@ export default function InputPage() {
                 <th className="num">Debit</th>
                 <th className="num">Tekanan</th>
                 <th>Jam</th>
+                <th>Foto</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {loadingRows ? (
                 <tr>
-                  <td colSpan={5} className="muted">
+                  <td colSpan={6} className="muted">
                     Memuat data...
                   </td>
                 </tr>
@@ -286,6 +399,15 @@ export default function InputPage() {
                   <td className="num">{r.debit_lps === null ? "—" : String(r.debit_lps).replace(".", ",")}</td>
                   <td className="num">{r.pressure_bar === null ? "—" : String(r.pressure_bar).replace(".", ",")}</td>
                   <td>{r.time.slice(0, 5)}</td>
+                  <td>
+                    {r.photo_url ? (
+                      <a href={r.photo_url} target="_blank" rel="noreferrer">
+                        <img src={r.photo_url} alt="Foto" width={48} height={48} style={{ objectFit: "cover", borderRadius: 6, display: "block" }} />
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td>
                     <button className="btn btn-secondary" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => editRow(r)}>
                       Ubah
@@ -309,7 +431,7 @@ export default function InputPage() {
               )))}
               {!loadingRows && rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="muted">
+                  <td colSpan={6} className="muted">
                     Belum ada pengukuran pada tanggal ini.
                   </td>
                 </tr>

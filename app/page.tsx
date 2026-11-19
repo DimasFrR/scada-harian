@@ -2,6 +2,7 @@ import Link from "next/link";
 import PdfButton, { type PdfAlarm, type PdfRow } from "@/components/PdfButton";
 import PrintButton from "@/components/PrintButton";
 import { computeAlarm, formatID, formatNum, monthNameID } from "@/lib/alarms";
+import { getWaTargets, isWaConfigured } from "@/lib/whatsapp";
 import {
   DbNotConfigured,
   getLatestMonthlyBilled,
@@ -137,6 +138,13 @@ export default async function DashboardPage() {
           <b>{row.point_name}</b> — {alarm.reasons.join("; ")} ({row.date} {row.time.slice(0, 5)})
         </div>
       ))}
+
+      <p className="muted no-print" style={{ marginTop: 4 }}>
+        Alarm WhatsApp:{" "}
+        {isWaConfigured()
+          ? `aktif — alarm kritis/peringatan terkirim ke ${getWaTargets().length} nomor.`
+          : "belum diaktifkan (atur FONNTE_TOKEN & WA_ALARM_TARGETS di Vercel). Alarm tetap tampil di dashboard ini."}
+      </p>
 
       <h2>Pengukuran Terbaru</h2>
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>

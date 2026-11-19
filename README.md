@@ -18,6 +18,15 @@ tarik data jadi PDF untuk diprint).
 - **Input Ukur**: tanggal + jam terisi otomatis (WIB) tapi bisa diubah (input
   susulan), debit (L/detik), tekanan (bar), checkbox "kosong". Angka boleh pakai
   koma Indonesia (6,55). Tambah/ubah/hapus titik & pengukuran.
+- **Foto bukti**: tiap pengukuran bisa dilampiri 1 foto meter/titik (diambil
+  dari kamera HP, otomatis dikompres ke maks 1280px JPEG q70, tersimpan di
+  Vercel Blob). Foto tampil sebagai thumbnail di riwayat Input & halaman Data.
+  Kalau `BLOB_READ_WRITE_TOKEN` belum diatur, fitur foto nonaktif dan
+  pengukuran tetap bisa disimpan tanpa foto.
+- **Alarm WhatsApp**: tiap pengukuran baru yang memicu alarm KRITIS/PERINGATAN
+  otomatis dikirim ke WhatsApp penerima via Fonnte (1x per pengukuran, tidak
+  spam). Butuh env `FONNTE_TOKEN` + `WA_ALARM_TARGETS`. Kalau belum diatur,
+  alarm tetap tampil di dashboard, WA tidak dikirim.
 - **Data**: tabel semua pengukuran dengan filter tanggal + titik.
 - **Tren**: grafik garis debit & tekanan per titik.
 - **Download PDF**: tombol di Dashboard & Data — generate PDF laporan asli
@@ -40,6 +49,30 @@ tarik data jadi PDF untuk diprint).
    `PRODUCTION_URL` di `capacitor.config.ts` (saat ini placeholder
    `https://scada-harian.vercel.app`), commit, push — workflow akan build APK
    baru yang menunjuk ke URL benar.
+
+## Aktivasi fitur foto & alarm WhatsApp (opsional)
+
+Keduanya **nonaktif secara default** dan aplikasi tetap jalan normal tanpanya.
+
+**Foto (Vercel Blob):**
+
+1. Vercel Dashboard → project ini → **Storage → Create → Blob**.
+2. Buka store baru → tab **.env.local** → salin `BLOB_READ_WRITE_TOKEN`.
+3. Project → **Settings → Environment Variables** → tambah
+   `BLOB_READ_WRITE_TOKEN` (Production) → **Redeploy**.
+4. Cek: di menu Input Ukur muncul kolom foto (bukan pesan "belum diaktifkan").
+
+**Alarm WhatsApp (Fonnte):**
+
+1. Daftar di [fonnte.com](https://fonnte.com), hubungkan nomor WhatsApp
+   pengirim (scan QR di dashboard Fonnte), salin **token** perangkat.
+2. Project → **Settings → Environment Variables** → tambah:
+   - `FONNTE_TOKEN` = token Fonnte
+   - `WA_ALARM_TARGETS` = nomor penerima dipisah koma, contoh
+     `6281234567890,6289876543210` (boleh tulis `08...`, otomatis diubah ke `62...`)
+3. **Redeploy**. Cek: di Dashboard muncul "Alarm WhatsApp: aktif — terkirim
+   ke N nomor." Alarm KRITIS/PERINGATAN dari pengukuran baru terkirim 1x per
+   pengukuran (edit pengukuran tidak mengirim ulang).
 
 ## APK Android
 
