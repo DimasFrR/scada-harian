@@ -159,7 +159,7 @@ export default function PdfButton({ rows, alarms, title, subtitle }: Props) {
         columnStyles: {
           0: { cellWidth: 22 },
           1: { cellWidth: 16 },
-          2: { cellWidth: 62 },
+          2: { cellWidth: 61 },
           3: { cellWidth: 28, halign: "right" },
           4: { cellWidth: 28, halign: "right" },
           5: { cellWidth: 26 },
