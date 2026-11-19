@@ -155,7 +155,9 @@ export default function PdfButton({ rows, title, subtitle }: Props) {
       const colW = 85;
       const leftCx = M + 45;
       const rightCx = W - M - 45;
-      const leftHead = [LEFT_HEAD, ...doc.splitTextToSize(LEFT_ROLE, colW)];
+      // Baris pertama kiri dikosongkan supaya "Mengetahui/Menyetujui," sejajar
+      // dengan "Dibuat Oleh," dan jabatan kiri sejajar dengan jabatan kanan (simetris)
+      const leftHead = ["", LEFT_HEAD, ...doc.splitTextToSize(LEFT_ROLE, colW)];
       const rightHead = [dateLine, RIGHT_HEAD, ...doc.splitTextToSize(RIGHT_ROLE, colW)];
       const headH = Math.max(leftHead.length, rightHead.length) * 5;
       doc.setFont("helvetica", "normal");
