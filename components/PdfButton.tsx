@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatNum } from "@/lib/alarms";
+import { SIGNER_LEFT, SIGNER_RIGHT, wibDateLine } from "@/lib/signers";
 
 export interface PdfRow {
   date: string;
@@ -26,21 +27,16 @@ interface Props {
   subtitle?: string;
 }
 
-// Penandatangan laporan — format surat biasa, ditandatangani manual setelah print
-const SIGNER_PLACE = "Tasikmalaya";
-const LEFT_HEAD = "Mengetahui/Menyetujui,";
-const LEFT_ROLE = "Kepala Bagian Transmisi dan Distribusi";
-const LEFT_NAME = "CECEP WENDI SETIADI, S.IP";
-const LEFT_NUP = "NUP. 0 2 2 1";
-const RIGHT_HEAD = "Dibuat Oleh,";
-const RIGHT_ROLE = "Kepala Sub Bagian Transmisi dan Distribusi";
-const RIGHT_NAME = "JONI KUSWARA, S.Sos";
-const RIGHT_NUP = "NUP. 0 3 0 4";
-
-const MONTHS_ID = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-];
+// Penandatangan laporan — lihat lib/signers.ts (format bersama dengan PDF
+// rekap bulanan: kiri "Mengetahui/Menyetujui," Kabag, kanan "Diketahui Oleh," Kasubag).
+const LEFT_HEAD = SIGNER_LEFT.head;
+const LEFT_ROLE = SIGNER_LEFT.role;
+const LEFT_NAME = SIGNER_LEFT.name;
+const LEFT_NUP = SIGNER_LEFT.nup;
+const RIGHT_HEAD = SIGNER_RIGHT.head;
+const RIGHT_ROLE = SIGNER_RIGHT.role;
+const RIGHT_NAME = SIGNER_RIGHT.name;
+const RIGHT_NUP = SIGNER_RIGHT.nup;
 
 async function toDataUrl(path: string): Promise<string | null> {
   try {
@@ -74,14 +70,7 @@ export default function PdfButton({ rows, title, subtitle }: Props) {
       const CX = W / 2;
 
       // Tanggal surat mengikuti tanggal berjalan (WIB)
-      const nowParts = new Intl.DateTimeFormat("id-ID", {
-        timeZone: "Asia/Jakarta",
-        day: "numeric",
-        month: "numeric",
-        year: "numeric",
-      }).formatToParts(new Date());
-      const get = (t: string) => nowParts.find((p) => p.type === t)?.value ?? "";
-      const dateLine = `${SIGNER_PLACE}, ${get("day")} ${MONTHS_ID[Number(get("month")) - 1]} ${get("year")}`;
+      const dateLine = wibDateLine();
 
       // --- Kop surat ---
       const logoData = await toDataUrl("/logo.png");

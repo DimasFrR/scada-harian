@@ -32,8 +32,13 @@ tarik data jadi PDF untuk diprint).
 - **Download PDF**: tombol di Dashboard & Data — generate PDF laporan asli
   (tabel data + ringkasan alarm) untuk diprint, seperti billing. Ada juga tombol
   Print (print stylesheet bersih).
+- **Rekap Bulanan**: rekap bulanan ala NRW — volume tertagih, produksi IPA,
+  distribusi, kehilangan air + NRW, grafik tren, dan rekap bacaan lapangan
+  per bulan, plus tombol "Unduh Rekap PDF" (format surat resmi). Angka
+  billing dimasukkan dari Lap DRD tiap bulan (lewat API), bukan form di
+  aplikasi — halaman ini hanya menampilkan (read-only).
 - **Panel referensi**: volume tertagih Okt 2026 — 49.102 SL / 683.735 m³ /
-  Rp 6.957.377.800 (18/18 cabang). NRW: "Menunggu data produksi IPA".
+  Rp 6.957.377.800 (18/18 cabang), NRW 34,14%.
 - **29 titik ukur** terdaftar otomatis saat database pertama kali diisi
   (`lib/points.ts`) — data pengukuran mulai dari NOL.
 

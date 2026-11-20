@@ -74,6 +74,11 @@ export async function ensureSchema(): Promise<void> {
         -- Foto bukti pengukuran (1 foto per pengukuran, URL Vercel Blob).
         -- ALTER terpisah karena tabel measurements sudah ada di production.
         ALTER TABLE measurements ADD COLUMN IF NOT EXISTS photo_url TEXT;
+        -- Produksi IPA & distribusi per bulan (dari atasan, untuk hitung
+        -- kehilangan air / NRW di Rekap Bulanan). Kolom baru — tabel
+        -- monthly_billed sudah ter-seed Okt 2026 sebelum kolom ini ada.
+        ALTER TABLE monthly_billed ADD COLUMN IF NOT EXISTS production_m3 NUMERIC;
+        ALTER TABLE monthly_billed ADD COLUMN IF NOT EXISTS distribution_m3 NUMERIC;
         -- Dedup kirim alarm WA: 1 baris = 1 alarm sudah dikirim untuk 1 pengukuran.
         CREATE TABLE IF NOT EXISTS alarm_notifications (
           measurement_id INTEGER PRIMARY KEY REFERENCES measurements(id) ON DELETE CASCADE,
@@ -97,6 +102,15 @@ export async function ensureSchema(): Promise<void> {
            ON CONFLICT (month) DO NOTHING`,
         );
       }
+      // Produksi & distribusi Okt 2026 (dari atasan, 18 Nov 2026:
+      // produksi IPA 1.038.148,11 m³, distribusi 1.036.354,66 m³) — hanya
+      // diisi bila baris Okt sudah ada tapi kolomnya masih kosong (tabel
+      // sudah ter-seed sebelum kolom production/distribution ada).
+      await p.query(
+        `UPDATE monthly_billed
+            SET production_m3 = 1038148.11, distribution_m3 = 1036354.66
+          WHERE month = '2026-10' AND production_m3 IS NULL`,
+      );
       // Seed 29 titik kanonis — hanya bila tabel masih kosong.
       if (pointsCount === 0) {
         for (let i = 0; i < POINTS.length; i++) {
@@ -137,6 +151,8 @@ export async function query<T>(
           k === "pressure_bar" ||
           k === "prev_debit_lps" ||
           k === "m3" ||
+          k === "production_m3" ||
+          k === "distribution_m3" ||
           k === "sl" ||
           k === "harga_air" ||
           k === "materai" ||
@@ -203,12 +219,15 @@ export interface MonthlyBilledRow {
   total_rp: number;
   branches: number | null;
   note: string | null;
+  // Produksi IPA & distribusi (m³) — null bila rekap bulan itu belum masuk.
+  production_m3: number | null;
+  distribution_m3: number | null;
   updated_at: string;
 }
 
 const MONTHLY_SELECT =
   `SELECT month, sl, m3, harga_air, materai, harga_air + materai AS total_rp,
-          branches, note, updated_at FROM monthly_billed`;
+          branches, note, production_m3, distribution_m3, updated_at FROM monthly_billed`;
 
 /** Volume tertagih bulan terbaru (untuk panel Dashboard). */
 export async function getLatestMonthlyBilled(): Promise<MonthlyBilledRow | null> {
@@ -230,20 +249,59 @@ export async function upsertMonthlyBilled(r: {
   materai: number;
   branches: number | null;
   note: string | null;
+  production_m3?: number | null;
+  distribution_m3?: number | null;
 }): Promise<void> {
   await query(
-    `INSERT INTO monthly_billed (month, sl, m3, harga_air, materai, branches, note, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+    `INSERT INTO monthly_billed (month, sl, m3, harga_air, materai, branches, note, production_m3, distribution_m3, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
      ON CONFLICT (month) DO UPDATE SET
        sl = EXCLUDED.sl, m3 = EXCLUDED.m3, harga_air = EXCLUDED.harga_air,
        materai = EXCLUDED.materai, branches = EXCLUDED.branches,
-       note = EXCLUDED.note, updated_at = NOW()`,
-    [r.month, r.sl, r.m3, r.harga_air, r.materai, r.branches, r.note],
+       note = EXCLUDED.note,
+       production_m3 = COALESCE(EXCLUDED.production_m3, monthly_billed.production_m3),
+       distribution_m3 = COALESCE(EXCLUDED.distribution_m3, monthly_billed.distribution_m3),
+       updated_at = NOW()`,
+    [
+      r.month,
+      r.sl,
+      r.m3,
+      r.harga_air,
+      r.materai,
+      r.branches,
+      r.note,
+      r.production_m3 ?? null,
+      r.distribution_m3 ?? null,
+    ],
   );
 }
 
 export async function deleteMonthlyBilled(month: string): Promise<void> {
   await query(`DELETE FROM monthly_billed WHERE month = $1`, [month]);
+}
+
+export interface MonthlyReadingRecap {
+  month: string; // YYYY-MM
+  rounds: number; // jumlah ronde laporan (tanggal berbeda)
+  rows: number; // jumlah baris bacaan
+  points_measured: number; // titik berbeda yang terukur (baris tidak kosong)
+  empty_rows: number; // baris yang dilaporkan tanpa air / tanpa tekanan
+}
+
+/** Rekap bacaan lapangan per bulan — untuk tabel Rekap Bacaan Lapangan di
+ *  halaman Bulanan. "Titik terukur" = titik berbeda yang punya minimal satu
+ *  baris bacaan tidak kosong pada bulan itu. */
+export async function getMonthlyReadingRecap(): Promise<MonthlyReadingRecap[]> {
+  return query<MonthlyReadingRecap>(
+    `SELECT to_char(date, 'YYYY-MM') AS month,
+            COUNT(DISTINCT date)::int AS rounds,
+            COUNT(*)::int AS rows,
+            COUNT(DISTINCT CASE WHEN NOT is_empty THEN point_id END)::int AS points_measured,
+            COUNT(*) FILTER (WHERE is_empty)::int AS empty_rows
+       FROM measurements
+      GROUP BY 1
+      ORDER BY 1 DESC`,
+  );
 }
 
 export async function getMeasurements(filter: {

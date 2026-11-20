@@ -1,302 +1,426 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import MonthlyPdfButton from "@/components/MonthlyPdfButton";
 import { formatID, monthNameID } from "@/lib/alarms";
-import type { MonthlyBilledRow } from "@/lib/db";
+import type { MonthlyBilledRow, MonthlyReadingRecap } from "@/lib/db";
+import {
+  deriveBilled,
+  fmt2,
+  fmtLossValueRp,
+  fmtPct2,
+  shortMonthID,
+} from "@/lib/monthly";
+import type { MonthlyPdfInput } from "@/lib/monthlyPdf";
 
-interface FormState {
-  month: string;
-  sl: string;
-  m3: string;
-  harga_air: string;
-  materai: string;
-  branches: string;
-  note: string;
+/**
+ * Rekap Bulanan — hanya menampilkan (read-only), tanpa form input billing.
+ * Angka billing/produksi/distribusi dimasukkan asisten dari Lap DRD tiap
+ * bulan (lewat API); halaman ini hanya menampilkan hasil rekapnya.
+ * Bulan yang rekap billing-nya belum masuk tetap tampil dengan bacaan
+ * lapangan saja + catatan "belum masuk", tanpa angka yang dikarang.
+ */
+
+// ---------- grafik SVG sederhana (tanpa dependensi), gaya TrendChart ----------
+
+function MonthlyBarChart({ rows }: { rows: { month: string; billed: number; loss: number }[] }) {
+  const W = 640;
+  const H = 220;
+  const PAD_L = 58;
+  const PAD_R = 12;
+  const PAD_T = 16;
+  const PAD_B = 30;
+  const maxV = Math.max(...rows.flatMap((r) => [r.billed, r.loss]), 1);
+  const plotW = W - PAD_L - PAD_R;
+  const groupW = plotW / rows.length;
+  const barW = Math.min(34, groupW / 3);
+  const y = (v: number) => PAD_T + (H - PAD_T - PAD_B) * (1 - v / maxV);
+  const base = H - PAD_B;
+  return (
+    <div className="chart-box">
+      <h3>Volume tertagih vs kehilangan air (m³ per bulan)</h3>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Volume tertagih vs kehilangan air">
+        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={base} stroke="#cbd5e1" />
+        <line x1={PAD_L} y1={base} x2={W - PAD_R} y2={base} stroke="#cbd5e1" />
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line x1={PAD_L} y1={y(maxV * f)} x2={W - PAD_R} y2={y(maxV * f)} stroke="#f1f5f9" />
+            <text x={PAD_L - 6} y={y(maxV * f) + 4} fontSize="11" textAnchor="end" fill="#64748b">
+              {`${Math.round((maxV * f) / 1000)} rb`}
+            </text>
+          </g>
+        ))}
+        {rows.map((r, i) => {
+          const cx = PAD_L + groupW * i + groupW / 2;
+          const bH = ((base - PAD_T - 8) * r.billed) / maxV;
+          const lH = ((base - PAD_T - 8) * r.loss) / maxV;
+          return (
+            <g key={r.month}>
+              <rect x={cx - barW - 2} y={base - bH} width={barW} height={bH} fill="#0e7490" />
+              <rect x={cx + 2} y={base - lH} width={barW} height={lH} fill="#dc2626" />
+              <text x={cx - barW / 2 - 2} y={base - bH - 4} fontSize="11" textAnchor="middle" fill="#0e7490">
+                {`${Math.round(r.billed / 1000)} rb`}
+              </text>
+              <text x={cx + barW / 2 + 2} y={base - lH - 4} fontSize="11" textAnchor="middle" fill="#dc2626">
+                {`${Math.round(r.loss / 1000)} rb`}
+              </text>
+              <text x={cx} y={H - 10} fontSize="11" textAnchor="middle" fill="#64748b">
+                {shortMonthID(r.month)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="legend">
+        <span>
+          <span className="dot" style={{ background: "#0e7490" }} />
+          Tertagih
+        </span>
+        <span>
+          <span className="dot" style={{ background: "#dc2626" }} />
+          Hilang
+        </span>
+      </div>
+    </div>
+  );
 }
 
-function emptyForm(): FormState {
-  const now = new Date();
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const month = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
-  return { month, sl: "", m3: "", harga_air: "", materai: "", branches: "", note: "" };
+function MonthlyLineChart({ rows }: { rows: { month: string; lossPct: number; nrwPct: number }[] }) {
+  const W = 640;
+  const H = 220;
+  const PAD_L = 52;
+  const PAD_R = 12;
+  const PAD_T = 16;
+  const PAD_B = 30;
+  const maxV = Math.max(...rows.flatMap((r) => [r.lossPct, r.nrwPct]), 1);
+  const yMax = Math.max(5, Math.ceil(maxV / 5) * 5);
+  const x = (i: number) =>
+    PAD_L + ((W - PAD_L - PAD_R) * i) / Math.max(1, rows.length - 1);
+  const y = (v: number) => PAD_T + (H - PAD_T - PAD_B) * (1 - v / yMax);
+  const base = H - PAD_B;
+  const line = (key: "lossPct" | "nrwPct") =>
+    rows.map((r, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(r[key]).toFixed(1)}`).join(" ");
+  return (
+    <div className="chart-box">
+      <h3>Kehilangan air &amp; NRW (% per bulan)</h3>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Kehilangan air dan NRW">
+        <line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={base} stroke="#cbd5e1" />
+        <line x1={PAD_L} y1={base} x2={W - PAD_R} y2={base} stroke="#cbd5e1" />
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line x1={PAD_L} y1={y(yMax * f)} x2={W - PAD_R} y2={y(yMax * f)} stroke="#f1f5f9" />
+            <text x={PAD_L - 6} y={y(yMax * f) + 4} fontSize="11" textAnchor="end" fill="#64748b">
+              {`${fmt2(yMax * f)}%`}
+            </text>
+          </g>
+        ))}
+        <path d={line("lossPct")} fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinejoin="round" />
+        <path d={line("nrwPct")} fill="none" stroke="#b45309" strokeWidth="2.5" strokeLinejoin="round" />
+        {rows.map((r, i) => (
+          <g key={r.month}>
+            <circle cx={x(i)} cy={y(r.lossPct)} r="3.5" fill="#dc2626" stroke="#fff" strokeWidth="1" />
+            <circle cx={x(i)} cy={y(r.nrwPct)} r="3.5" fill="#b45309" stroke="#fff" strokeWidth="1" />
+            <text x={x(i)} y={y(r.lossPct) - 8} fontSize="11" textAnchor="middle" fill="#dc2626">
+              {fmtPct2(r.lossPct)}
+            </text>
+            <text x={x(i)} y={y(r.nrwPct) + 16} fontSize="11" textAnchor="middle" fill="#b45309">
+              {fmtPct2(r.nrwPct)}
+            </text>
+            <text x={x(i)} y={H - 10} fontSize="11" textAnchor="middle" fill="#64748b">
+              {shortMonthID(r.month)}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div className="legend">
+        <span>
+          <span className="dot" style={{ background: "#dc2626" }} />
+          Kehilangan (dari distribusi)
+        </span>
+        <span>
+          <span className="dot" style={{ background: "#b45309" }} />
+          NRW (dari produksi)
+        </span>
+      </div>
+    </div>
+  );
 }
 
-function fmt(n: number): string {
-  return new Intl.NumberFormat("id-ID").format(n);
-}
-
-/** Angka Indonesia dengan pemisah ribuan titik: "49.102" -> 49102,
- * "6.957.137.800" -> 6957137800, "6,55" -> 6.55. */
-function parseIDInt(raw: string | null | undefined): number | null {
-  if (raw === null || raw === undefined) return null;
-  const s = raw.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-  if (s === "" || s === "-" || s === ".") return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
+// ---------- halaman ----------
 
 export default function BulananPage() {
-  const [rows, setRows] = useState<MonthlyBilledRow[]>([]);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  // Dulu satu gate "Memuat..." untuk seluruh halaman — form ikut hilang
-  // sampai data selesai dimuat. Sekarang form langsung tampil, yang
-  // menunggu hanya tabel riwayat di bawah.
-  const [loadingRows, setLoadingRows] = useState(true);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoadingRows(true);
-    try {
-      const res = await fetch("/api/monthly-billed");
-      const data = await res.json();
-      if (data.ok) setRows(data.months);
-      else setMsg({ kind: "err", text: data.error || "Gagal memuat data bulanan." });
-    } catch {
-      // Jangan tampilkan tabel kosong seolah-olah tidak ada data — kalau
-      // fetch gagal (mis. sesi habis sehingga API melempar ke halaman
-      // login), beri tahu user, bukan "Belum ada data bulanan."
-      setMsg({ kind: "err", text: "Gagal memuat data bulanan — periksa koneksi, lalu login ulang bila perlu." });
-    } finally {
-      setLoadingRows(false);
-    }
-  }, []);
+  const [months, setMonths] = useState<MonthlyBilledRow[]>([]);
+  const [recap, setRecap] = useState<MonthlyReadingRecap[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState("");
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/monthly-billed");
+        const data = await res.json();
+        if (data.ok) {
+          setMonths(data.months);
+          setRecap(data.recap);
+        } else {
+          setError(data.error || "Gagal memuat rekap bulanan.");
+        }
+      } catch {
+        setError("Gagal memuat rekap bulanan — periksa koneksi, lalu login ulang bila perlu.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
-  function editRow(r: MonthlyBilledRow) {
-    setForm({
-      month: r.month,
-      sl: fmt(r.sl),
-      m3: fmt(r.m3),
-      harga_air: fmt(r.harga_air),
-      materai: fmt(r.materai),
-      branches: r.branches === null ? "" : String(r.branches),
-      note: r.note ?? "",
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  // Daftar bulan = gabungan bulan billing + bulan bacaan lapangan, terbaru dulu.
+  const allMonths = useMemo(() => {
+    const s = new Set<string>();
+    months.forEach((m) => s.add(m.month));
+    recap.forEach((r) => s.add(r.month));
+    return [...s].sort().reverse();
+  }, [months, recap]);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg(null);
-    const sl = parseIDInt(form.sl);
-    const m3 = parseIDInt(form.m3);
-    const harga_air = parseIDInt(form.harga_air);
-    const materai = parseIDInt(form.materai) ?? 0;
-    const branches = form.branches.trim() === "" ? null : parseIDInt(form.branches);
-    if (!/^\d{4}-\d{2}$/.test(form.month)) {
-      return setMsg({ kind: "err", text: "Pilih bulan dulu." });
+  // Default: bulan terbaru yang ada billing-nya, kalau tidak ada — bulan terbaru.
+  useEffect(() => {
+    if (selected === "" && allMonths.length > 0) {
+      const latestBilled = months.length > 0 ? months[0].month : allMonths[0];
+      setSelected(latestBilled);
     }
-    if (sl === null || m3 === null || harga_air === null) {
-      return setMsg({ kind: "err", text: "Isi SL, m³, dan Harga Air (boleh pakai titik ribuan, contoh 683.735)." });
-    }
-    setBusy(true);
-    try {
-      const res = await fetch("/api/monthly-billed", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          month: form.month,
-          sl,
-          m3,
-          harga_air,
-          materai,
-          branches,
-          note: form.note.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Gagal menyimpan.");
-      setMsg({ kind: "ok", text: `Data ${monthNameID(form.month)} tersimpan — panel Dashboard ikut berubah.` });
-      setForm(emptyForm());
-      await load();
-    } catch (err) {
-      setMsg({ kind: "err", text: err instanceof Error ? err.message : "Gagal menyimpan." });
-    } finally {
-      setBusy(false);
-    }
-  }
+  }, [allMonths, months, selected]);
 
-  async function deleteRow(month: string) {
-    const res = await fetch(`/api/monthly-billed?month=${month}`, { method: "DELETE" });
-    const data = await res.json();
-    setConfirmDelete(null);
-    if (data.ok) {
-      setMsg({ kind: "ok", text: `Data ${monthNameID(month)} dihapus.` });
-      await load();
-    } else {
-      setMsg({ kind: "err", text: data.error || "Gagal menghapus." });
-    }
-  }
+  const billed = useMemo(
+    () => months.find((m) => m.month === selected) ?? null,
+    [months, selected],
+  );
+  const derived = useMemo(() => (billed ? deriveBilled(billed) : null), [billed]);
+
+  // Bulan-bulan dengan billing, urut kronologis — untuk grafik tren.
+  const chartRows = useMemo(() => {
+    const asc = [...months].sort((a, b) => a.month.localeCompare(b.month));
+    return asc
+      .map((b) => ({ b, d: deriveBilled(b) }))
+      .filter((r) => r.d.lossM3 !== null && r.d.lossPct !== null && r.d.nrwPct !== null)
+      .map((r) => ({
+        month: r.b.month,
+        billed: r.b.m3,
+        loss: r.d.lossM3!,
+        lossPct: r.d.lossPct!,
+        nrwPct: r.d.nrwPct!,
+      }));
+  }, [months]);
+
+  const pdfInput: MonthlyPdfInput | null =
+    selected === ""
+      ? null
+      : {
+          selectedMonth: selected,
+          billed,
+          billedMonths: [...months].sort((a, b) => a.month.localeCompare(b.month)),
+          recap,
+        };
 
   return (
     <div>
-      <h1>Volume Tertagih Bulanan</h1>
+      <h1>Rekap Bulanan</h1>
       <p className="lead">
-        Isi angka dari Lap DRD billing tiap bulan. Bulan terbaru otomatis tampil di panel
-        Dashboard — tidak perlu edit kode lagi.
+        Rekap bulanan ala NRW: volume tertagih, produksi, distribusi, dan
+        kehilangan air — angka billing dimasukkan dari Lap DRD tiap bulan.
       </p>
 
-      {msg && <div className={msg.kind === "ok" ? "success" : "error"}>{msg.text}</div>}
+      {error && <div className="error">{error}</div>}
 
-      <form className="card" onSubmit={submit}>
-        <h3>Input Bulanan</h3>
-        <label htmlFor="month">Bulan</label>
-        <input
-          id="month"
-          type="month"
-          value={form.month}
-          onChange={(e) => setForm({ ...form, month: e.target.value })}
-          required
-        />
+      {loading ? (
+        <p className="muted">Memuat rekap bulanan...</p>
+      ) : allMonths.length === 0 ? (
+        <div className="notice">Belum ada data bulanan maupun bacaan lapangan.</div>
+      ) : (
+        <>
+          <label htmlFor="b-month">Bulan</label>
+          <select
+            id="b-month"
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            {allMonths.map((m) => {
+              const hasBilling = months.some((x) => x.month === m);
+              return (
+                <option key={m} value={m}>
+                  {monthNameID(m)}
+                  {hasBilling ? "" : " — rekap billing belum masuk"}
+                </option>
+              );
+            })}
+          </select>
 
-        <label htmlFor="sl">Jumlah SL (pelanggan)</label>
-        <input
-          id="sl"
-          type="text"
-          inputMode="numeric"
-          value={form.sl}
-          onChange={(e) => setForm({ ...form, sl: e.target.value })}
-          placeholder="contoh: 49.102"
-          required
-        />
+          <div className="btn-row no-print" style={{ marginTop: 12, marginBottom: 12 }}>
+            {pdfInput && <MonthlyPdfButton input={pdfInput} />}
+          </div>
 
-        <label htmlFor="m3">Volume (m³)</label>
-        <input
-          id="m3"
-          type="text"
-          inputMode="decimal"
-          value={form.m3}
-          onChange={(e) => setForm({ ...form, m3: e.target.value })}
-          placeholder="contoh: 683.735"
-          required
-        />
+          {billed && derived ? (
+            <>
+              <div className="kpi-grid">
+                <div className="kpi">
+                  <div className="kpi-num">{formatID(billed.sl)}</div>
+                  <div className="kpi-label">Pelanggan tertagih (SL)</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-num">{fmt2(billed.m3)}</div>
+                  <div className="kpi-label">Volume tertagih (m³) · Rp {formatID(billed.total_rp)}</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-num">
+                    {billed.production_m3 !== null ? fmt2(billed.production_m3) : "—"}
+                  </div>
+                  <div className="kpi-label">Produksi IPA (m³)</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-num">
+                    {billed.distribution_m3 !== null ? fmt2(billed.distribution_m3) : "—"}
+                  </div>
+                  <div className="kpi-label">
+                    Distribusi (m³)
+                    {derived.transmissionLoss !== null &&
+                      ` · kehilangan transmisi ${fmt2(derived.transmissionLoss)} m³`}
+                  </div>
+                </div>
+              </div>
 
-        <label htmlFor="harga_air">Harga Air (Rp)</label>
-        <input
-          id="harga_air"
-          type="text"
-          inputMode="numeric"
-          value={form.harga_air}
-          onChange={(e) => setForm({ ...form, harga_air: e.target.value })}
-          placeholder="contoh: 6.957.137.800"
-          required
-        />
-
-        <label htmlFor="materai">Materai (Rp)</label>
-        <input
-          id="materai"
-          type="text"
-          inputMode="numeric"
-          value={form.materai}
-          onChange={(e) => setForm({ ...form, materai: e.target.value })}
-          placeholder="contoh: 240.000 (boleh kosong = 0)"
-        />
-
-        <label htmlFor="branches">Jumlah cabang</label>
-        <input
-          id="branches"
-          type="text"
-          inputMode="numeric"
-          value={form.branches}
-          onChange={(e) => setForm({ ...form, branches: e.target.value })}
-          placeholder="contoh: 18 (boleh kosong)"
-        />
-
-        <label htmlFor="note">Keterangan / sumber</label>
-        <input
-          id="note"
-          type="text"
-          value={form.note}
-          onChange={(e) => setForm({ ...form, note: e.target.value })}
-          placeholder="contoh: Lap DRD Rekapitulasi Global"
-        />
-
-        <div className="btn-row" style={{ marginTop: 12 }}>
-          <button className="btn" type="submit" disabled={busy}>
-            {busy ? "Menyimpan..." : "Simpan Data Bulanan"}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setForm(emptyForm())}>
-            Reset
-          </button>
-        </div>
-        <p className="hint">
-          Total dihitung otomatis: Harga Air + Materai. Kalau bulan yang sama disimpan lagi,
-          angka lamanya ditimpa.
-        </p>
-      </form>
-
-      <h2>Riwayat Bulanan</h2>
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Bulan</th>
-                <th className="num">SL</th>
-                <th className="num">m³</th>
-                <th className="num">Total (Rp)</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingRows ? (
-                <tr>
-                  <td colSpan={5} className="muted">
-                    Memuat data...
-                  </td>
-                </tr>
+              {derived.lossM3 !== null ? (
+                <div className="card">
+                  <h3>Kehilangan Air — {monthNameID(billed.month)}</h3>
+                  <p>
+                    <b>{fmt2(derived.lossM3)} m³</b> ·{" "}
+                    <b>{derived.lossPct !== null ? fmtPct2(derived.lossPct) : "—"}</b> dari
+                    distribusi · NRW{" "}
+                    <b>{derived.nrwPct !== null ? fmtPct2(derived.nrwPct) : "—"}</b> dari
+                    produksi
+                  </p>
+                  <p className="muted">
+                    Nilai kehilangan{" "}
+                    {derived.lossValueRp !== null ? fmtLossValueRp(derived.lossValueRp) : "—"}{" "}
+                    (estimasi dari tarif rata-rata tertagih, bukan angka tagihan).
+                  </p>
+                  {billed.distribution_m3 !== null && derived.lossPct !== null && (
+                    <div style={{ marginTop: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          height: 16,
+                          borderRadius: 8,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${(billed.m3 / billed.distribution_m3) * 100}%`,
+                            background: "#15803d",
+                          }}
+                        />
+                        <div
+                          style={{
+                            width: `${derived.lossPct}%`,
+                            background: "#dc2626",
+                          }}
+                        />
+                      </div>
+                      <p className="muted" style={{ marginTop: 6 }}>
+                        <span style={{ color: "#15803d" }}>
+                          Tertagih {fmt2(billed.m3)} m³ (
+                          {fmtPct2((billed.m3 / billed.distribution_m3) * 100)})
+                        </span>{" "}
+                        ·{" "}
+                        <span style={{ color: "#dc2626" }}>
+                          Hilang {fmt2(derived.lossM3)} m³ ({fmtPct2(derived.lossPct)})
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
               ) : (
-                rows.map((r) => (
-                <tr key={r.month}>
-                  <td>
-                    <b>{monthNameID(r.month)}</b>
-                    {r.note && (
-                      <>
-                        <br />
-                        <span className="muted">{r.note}</span>
-                      </>
-                    )}
-                  </td>
-                  <td className="num">{formatID(r.sl)}</td>
-                  <td className="num">{formatID(r.m3)}</td>
-                  <td className="num">{formatID(r.total_rp)}</td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => editRow(r)}>
-                      Ubah
-                    </button>{" "}
-                    {confirmDelete === r.month ? (
-                      <>
-                        <button className="btn btn-danger" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => deleteRow(r.month)}>
-                          Yakin hapus?
-                        </button>{" "}
-                        <button className="btn btn-secondary" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => setConfirmDelete(null)}>
-                          Batal
-                        </button>
-                      </>
-                    ) : (
-                      <button className="btn btn-danger" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => setConfirmDelete(r.month)}>
-                        Hapus
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              )))}
-              {!loadingRows && rows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="muted">
-                    Belum ada data bulanan.
-                  </td>
-                </tr>
+                <div className="notice">
+                  Produksi / distribusi bulan ini belum masuk, jadi kehilangan air belum
+                  bisa dihitung.
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+
+              <h2>Tren Bulanan</h2>
+              {chartRows.length >= 2 ? (
+                <>
+                  <MonthlyBarChart rows={chartRows} />
+                  <MonthlyLineChart rows={chartRows} />
+                </>
+              ) : (
+                <p className="muted">
+                  Baru satu bulan yang rekap billing-nya lengkap, jadi grafik masih satu
+                  titik — trennya terbentuk otomatis begitu rekap bulan berikutnya masuk.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="notice">
+              <b>Rekap Billing {monthNameID(selected)} Belum Masuk</b>
+              <br />
+              Rekap billing bulan {monthNameID(selected)} belum masuk. Di bawah ini hanya
+              rekap bacaan lapangan — angka tertagih, produksi, dan kehilangan air akan
+              muncul setelah rekap Lap DRD bulan tersebut selesai.
+            </div>
+          )}
+
+          <h2>Rekap Bacaan Lapangan</h2>
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Bulan</th>
+                    <th className="num">Ronde laporan</th>
+                    <th className="num">Baris bacaan</th>
+                    <th className="num">Titik terukur</th>
+                    <th className="num">Bacaan kosong</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recap.map((r) => (
+                    <tr
+                      key={r.month}
+                      style={
+                        r.month === selected
+                          ? { background: "#ecfeff", fontWeight: 700 }
+                          : undefined
+                      }
+                    >
+                      <td>
+                        <b>{monthNameID(r.month)}</b>
+                      </td>
+                      <td className="num">{r.rounds}</td>
+                      <td className="num">{r.rows}</td>
+                      <td className="num">{r.points_measured}</td>
+                      <td className="num" style={r.empty_rows > 0 ? { color: "#dc2626" } : undefined}>
+                        {r.empty_rows}
+                      </td>
+                    </tr>
+                  ))}
+                  {recap.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="muted">
+                        Belum ada data bacaan lapangan.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p className="muted">
+            Dihitung dari seluruh pengukuran tersimpan (ronde keliling Senin &amp; Jumat).
+            &quot;Bacaan kosong&quot; = titik yang pada ronde itu dilaporkan tanpa air /
+            tanpa tekanan.
+          </p>
+        </>
+      )}
     </div>
   );
 }

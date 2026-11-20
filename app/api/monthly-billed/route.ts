@@ -3,6 +3,7 @@ import {
   DbNotConfigured,
   deleteMonthlyBilled,
   getMonthlyBilledList,
+  getMonthlyReadingRecap,
   upsertMonthlyBilled,
 } from "@/lib/db";
 
@@ -29,8 +30,11 @@ function parseNum(v: unknown): number | null {
 
 export async function GET() {
   try {
-    const rows = await getMonthlyBilledList();
-    return NextResponse.json({ ok: true, months: rows });
+    const [rows, recap] = await Promise.all([
+      getMonthlyBilledList(),
+      getMonthlyReadingRecap(),
+    ]);
+    return NextResponse.json({ ok: true, months: rows, recap });
   } catch (e) {
     return dbError(e);
   }
@@ -50,6 +54,8 @@ export async function POST(req: NextRequest) {
         : parseNum(body.branches);
     const note =
       body.note === null || body.note === undefined ? null : String(body.note).trim() || null;
+    const production_m3 = parseNum(body.production_m3);
+    const distribution_m3 = parseNum(body.distribution_m3);
     if (!/^\d{4}-\d{2}$/.test(month) || sl === null || m3 === null || harga_air === null) {
       return NextResponse.json(
         { ok: false, error: "Data tidak lengkap: isi bulan, SL, m³, dan Harga Air." },
@@ -62,6 +68,15 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+    if (
+      (production_m3 !== null && production_m3 < 0) ||
+      (distribution_m3 !== null && distribution_m3 < 0)
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "Produksi / distribusi tidak boleh negatif." },
+        { status: 400 },
+      );
+    }
     await upsertMonthlyBilled({
       month,
       sl: Math.round(sl),
@@ -70,6 +85,8 @@ export async function POST(req: NextRequest) {
       materai: Math.round(materai),
       branches: branches === null ? null : Math.round(branches),
       note,
+      production_m3,
+      distribution_m3,
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

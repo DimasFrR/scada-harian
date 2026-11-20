@@ -2,6 +2,7 @@ import Link from "next/link";
 import PdfButton, { type PdfAlarm, type PdfRow } from "@/components/PdfButton";
 import PrintButton from "@/components/PrintButton";
 import { computeAlarm, formatID, formatNum, monthNameID } from "@/lib/alarms";
+import { fmtPct2 } from "@/lib/monthly";
 import { getWaTargets, isWaConfigured } from "@/lib/whatsapp";
 import {
   DbNotConfigured,
@@ -249,10 +250,19 @@ function BilledPanel({ row }: { row?: MonthlyBilledRow | null }) {
         {row.note ? ` · ${row.note}` : ""}
       </p>
       <p>
-        NRW: <b>Menunggu data produksi IPA</b>
+        NRW:{" "}
+        {row.production_m3 !== null && row.distribution_m3 !== null ? (
+          <b>
+            {fmtPct2(((row.production_m3 - row.m3) / row.production_m3) * 100)}{" "}
+            (kehilangan {formatID(Math.round(row.distribution_m3 - row.m3))} m³ dari
+            distribusi)
+          </b>
+        ) : (
+          <b>Menunggu data produksi IPA</b>
+        )}
       </p>
       <p>
-        <Link href="/bulanan">Ubah / tambah data bulanan →</Link>
+        <Link href="/bulanan">Lihat rekap bulanan →</Link>
       </p>
     </div>
   );
