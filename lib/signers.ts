@@ -1,6 +1,6 @@
 // Penandatangan laporan — format surat resmi, ditandatangani manual setelah print.
-// Format disepakati 20 Nov 2026 (diperbaiki dari prototype):
-// kiri "Mengetahui/Menyetujui," (Kabag), kanan "Diketahui Oleh," (Kasubag);
+// Format disepakati 20 Nov 2026 (diperbaiki dari prototype), diubah 21 Nov 2026:
+// kiri "Mengetahui," (Kabag), kanan "Diketahui Oleh," (Kasubag);
 // kedua blok sejajar (judul, nama, NUP pada ketinggian yang sama).
 // Dipakai bersama oleh PDF laporan harian (PdfButton) dan PDF rekap bulanan
 // (monthlyPdf) supaya formatnya tidak melenceng satu sama lain.
@@ -8,7 +8,7 @@
 export const SIGNER_PLACE = "Tasikmalaya";
 
 export const SIGNER_LEFT = {
-  head: "Mengetahui/Menyetujui,",
+  head: "Mengetahui,",
   role: "Kepala Bagian Transmisi dan Distribusi",
   name: "CECEP WENDI SETIADI, S.IP",
   nup: "NUP 0221",
@@ -16,7 +16,7 @@ export const SIGNER_LEFT = {
 
 export const SIGNER_RIGHT = {
   head: "Diketahui Oleh,",
-  role: "Kepala Sub Bagian Transmisi dan Distribusi",
+  role: "Kepala Sub Bagian Pengendalian Kehilangan Air",
   name: "JONI KUSWARA, S.Sos",
   nup: "NUP 0304",
 };
