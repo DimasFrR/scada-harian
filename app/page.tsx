@@ -84,9 +84,6 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div style={{ textAlign: "center", marginBottom: 4 }}>
-        <img src="/logo.png" alt="Logo Tirta Sukapura" width={96} height={96} style={{ borderRadius: "50%" }} />
-      </div>
       <h1 style={{ textAlign: "center" }}>Dashboard</h1>
       <p className="lead">Pengukuran terbaru tiap titik + alarm otomatis.</p>
 
@@ -99,12 +96,15 @@ export default async function DashboardPage() {
           <div className="kpi-num">{latest.length}</div>
           <div className="kpi-label">Sudah diukur</div>
         </div>
-        <div className="kpi">
-          <div className={`kpi-num ${critical.length ? "crit" : ""}`}>{critical.length}</div>
+        {/* Kartu kritis/peringatan dibedakan bukan hanya lewat warna angka
+            (tidak jelas bagi pengguna buta warna / di bawah matahari):
+            ada ikon teks + border/latar pembeda (.kpi-crit / .kpi-warn). */}
+        <div className={`kpi${critical.length ? " kpi-crit" : ""}`}>
+          <div className={`kpi-num ${critical.length ? "crit" : ""}`}>{critical.length ? `⚠ ${critical.length}` : critical.length}</div>
           <div className="kpi-label">Kritis</div>
         </div>
-        <div className="kpi">
-          <div className={`kpi-num ${warning.length ? "warn" : ""}`}>{warning.length}</div>
+        <div className={`kpi${warning.length ? " kpi-warn" : ""}`}>
+          <div className={`kpi-num ${warning.length ? "warn" : ""}`}>{warning.length ? `! ${warning.length}` : warning.length}</div>
           <div className="kpi-label">Peringatan</div>
         </div>
       </div>
@@ -157,7 +157,6 @@ export default async function DashboardPage() {
                 <th className="num">Debit (L/dtk)</th>
                 <th className="num">Tekanan (bar)</th>
                 <th>Tanggal / Jam</th>
-                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -165,6 +164,14 @@ export default async function DashboardPage() {
                 <tr key={row.id}>
                   <td>
                     <b>{row.point_name}</b>
+                    <br />
+                    {/* Badge status dipindah ke bawah nama titik di kolom
+                        pertama: di layar HP 360px kolom Status terpisah
+                        terpotong ke kanan sampai digeser horizontal. */}
+                    {alarm.level === "critical" && <span className="badge critical">KRITIS</span>}
+                    {alarm.level === "warning" && <span className="badge warning">PERINGATAN</span>}
+                    {alarm.level === "ok" && <span className="badge ok">NORMAL</span>}
+                    {row.is_empty && <span className="badge empty">KOSONG</span>}
                   </td>
                   <td className="num">{formatNum(row.debit_lps)}</td>
                   <td className="num">{formatNum(row.pressure_bar)}</td>
@@ -173,17 +180,11 @@ export default async function DashboardPage() {
                     <br />
                     <span className="muted">{row.time.slice(0, 5)}</span>
                   </td>
-                  <td>
-                    {alarm.level === "critical" && <span className="badge critical">KRITIS</span>}
-                    {alarm.level === "warning" && <span className="badge warning">PERINGATAN</span>}
-                    {alarm.level === "ok" && <span className="badge ok">NORMAL</span>}
-                    {row.is_empty && <span className="badge empty">KOSONG</span>}
-                  </td>
                 </tr>
               ))}
               {latest.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="muted">
+                  <td colSpan={4} className="muted">
                     Belum ada pengukuran.
                   </td>
                 </tr>
@@ -251,7 +252,7 @@ function BilledPanel({ row }: { row?: MonthlyBilledRow | null }) {
       </p>
       <p>
         NRW:{" "}
-        {row.production_m3 !== null && row.distribution_m3 !== null ? (
+        {row.production_m3 !== null && row.distribution_m3 !== null && row.production_m3 > 0 ? (
           <b>
             {fmtPct2(((row.production_m3 - row.m3) / row.production_m3) * 100)}{" "}
             (kehilangan {formatID(Math.round(row.distribution_m3 - row.m3))} m³ dari

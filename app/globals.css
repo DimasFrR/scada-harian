@@ -1,15 +1,16 @@
-/* SCADA Harian — mobile-first, tema air (cyan/teal). */
+/* SCADA Harian — mobile-first, tema air (cyan/teal), kontras tinggi untuk pemakaian lapangan di bawah matahari. */
 :root {
   --teal: #0e7490;
   --teal-dark: #155e75;
   --bg: #f0f9fa;
   --card: #ffffff;
-  --text: #134e5e;
-  --muted: #64748b;
-  --border: #cbd5e1;
-  --red: #dc2626;
+  --text: #0f3d4c;
+  --muted: #475569; /* kontras >= 7:1 di atas putih & #f0f9fa (sebelumnya #64748b < 4.5:1 di --bg) */
+  --border: #94a3b8;
+  --border-soft: #cbd5e1;
+  --red: #b91c1c;
   --red-bg: #fef2f2;
-  --amber: #b45309;
+  --amber: #92400e; /* kontras >= 7:1 dengan teks putih pada badge peringatan */
   --amber-bg: #fffbeb;
   --green: #15803d;
   --green-bg: #f0fdf4;
@@ -25,11 +26,22 @@ body {
   color: var(--text);
   font-size: 16px;
   line-height: 1.5;
-  padding-bottom: 88px; /* ruang untuk bottom nav (yang kini lebih tinggi karena safe-area) */
+  /* Ruang cukup agar konten & tombol paling bawah tidak pernah tertutup bottom nav + gestur Android */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
 a { color: var(--teal); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--teal-dark);
+  outline-offset: 2px;
+}
 
 /* ---------- header ---------- */
 .topbar {
@@ -38,36 +50,41 @@ a:hover { text-decoration: underline; }
   position: sticky;
   top: 0;
   z-index: 20;
-  /* Jarak dari status bar / kamera depan (dynamic island): tanpa ini
-     judul ketutup status bar HP di tampilan edge-to-edge. */
   padding-top: env(safe-area-inset-top, 0px);
 }
 .topbar-inner {
   max-width: 760px;
   margin: 0 auto;
-  padding: 10px 16px;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
-.brand { font-size: 20px; font-weight: 800; line-height: 1.2; }
-.brand-sub { font-size: 12px; opacity: 0.9; }
+.brand { font-size: 19px; font-weight: 800; line-height: 1.2; }
+.brand-sub { font-size: 12px; opacity: 0.95; }
+.logout-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .logout-btn {
   color: #fff;
   background: transparent;
   font: inherit;
   cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.6);
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
   border-radius: 999px;
-  padding: 6px 14px;
+  padding: 8px 14px;
+  min-height: 44px; /* target sentuh jempol minimal 44px */
   font-size: 14px;
+  font-weight: 700;
   white-space: nowrap;
 }
-.logout-btn:hover { background: rgba(255,255,255,0.15); text-decoration: none; }
+.logout-btn:hover { background: rgba(255, 255, 255, 0.18); text-decoration: none; }
+.logout-btn.confirm {
+  background: var(--red);
+  border-color: #fecaca;
+}
 
 /* ---------- layout ---------- */
-.container { max-width: 760px; margin: 0 auto; padding: 16px 12px 24px; }
+.container { max-width: 760px; margin: 0 auto; padding: 14px 12px 24px; }
 h1 { font-size: 22px; margin: 4px 0 4px; }
 h2 { font-size: 18px; margin: 20px 0 8px; }
 p.lead { color: var(--muted); margin: 0 0 12px; }
@@ -85,26 +102,37 @@ p.lead { color: var(--muted); margin: 0 0 12px; }
 
 /* ---------- tombol ---------- */
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--teal);
   color: #fff;
   border: none;
   border-radius: 10px;
-  padding: 12px 18px;
+  padding: 12px 16px;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
   min-height: 48px;
+  text-align: center;
 }
-.btn:hover { background: var(--teal-dark); }
-.btn:disabled { opacity: 0.55; cursor: default; }
+.btn:hover { background: var(--teal-dark); text-decoration: none; }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn-secondary {
   background: #fff;
-  color: var(--teal);
+  color: var(--teal-dark);
   border: 1.5px solid var(--teal);
 }
-.btn-danger { background: var(--red); }
-.btn-block { display: block; width: 100%; text-align: center; }
+.btn-secondary:hover { background: #ecfeff; }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-danger:hover { background: #991b1b; }
+.btn-sm {
+  padding: 8px 12px;
+  min-height: 44px;
+  font-size: 14px;
+}
+.btn-block { display: flex; width: 100%; }
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-row .btn { flex: 1; }
 
@@ -121,65 +149,184 @@ input[type="number"], select, textarea {
   color: var(--text);
   min-height: 48px;
 }
-input:focus, select:focus { outline: 2px solid var(--teal); border-color: var(--teal); }
-.check-row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
-.check-row input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--teal); }
-.check-row label { margin: 0; font-size: 16px; }
+input:disabled, select:disabled, textarea:disabled {
+  background: #f1f5f9;
+  color: var(--muted);
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border-soft);
+}
+.check-row input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  accent-color: var(--teal);
+}
+.check-row label { margin: 0; font-size: 15px; cursor: pointer; }
 .hint { font-size: 13px; color: var(--muted); margin-top: 4px; }
-.error { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca; border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
-.notice { background: var(--amber-bg); color: var(--amber); border: 1px solid #fde68a; border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
-.success { background: var(--green-bg); color: var(--green); border: 1px solid #bbf7d0; border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.error {
+  background: var(--red-bg);
+  color: #7f1d1d;
+  border: 1.5px solid #f87171;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 10px 0;
+  font-weight: 600;
+}
+.notice {
+  background: var(--amber-bg);
+  color: #78350f;
+  border: 1.5px solid #f59e0b;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 10px 0;
+}
+.success {
+  background: var(--green-bg);
+  color: #14532d;
+  border: 1.5px solid #4ade80;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 10px 0;
+  font-weight: 600;
+}
+
+/* Tombol pilih/ambil foto ramah jempol */
+.file-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1.5px dashed var(--teal);
+  background: #ecfeff;
+  color: var(--teal-dark);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  margin: 4px 0 0;
+}
+.file-trigger.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- collapsible section (aksi administratif) ---------- */
+details.admin-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 16px;
+}
+details.admin-box summary {
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 
 /* ---------- dashboard ---------- */
 .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-.kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
-.kpi .kpi-num { font-size: 22px; font-weight: 800; line-height: 1.15; }
+.kpi {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.kpi.kpi-crit { border-color: var(--red); background: var(--red-bg); }
+.kpi.kpi-warn { border-color: #d97706; background: var(--amber-bg); }
+.kpi .kpi-num {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
 .kpi .kpi-num.crit { color: var(--red); }
 .kpi .kpi-num.warn { color: var(--amber); }
-.kpi .kpi-label { font-size: 13px; color: var(--muted); }
+.kpi .kpi-label { font-size: 13px; color: var(--muted); font-weight: 600; }
 
 .alarm { border-radius: 10px; padding: 10px 12px; margin: 6px 0; font-size: 15px; }
-.alarm.critical { background: var(--red-bg); border: 1px solid #fecaca; color: #7f1d1d; }
-.alarm.warning { background: var(--amber-bg); border: 1px solid #fde68a; color: #78350f; }
-.alarm.ok { background: var(--green-bg); border: 1px solid #bbf7d0; color: #14532d; }
+.alarm.critical { background: var(--red-bg); border: 1.5px solid #f87171; color: #7f1d1d; }
+.alarm.warning { background: var(--amber-bg); border: 1.5px solid #f59e0b; color: #78350f; }
+.alarm.ok { background: var(--green-bg); border: 1.5px solid #4ade80; color: #14532d; }
 .badge {
-  display: inline-block; font-size: 12px; font-weight: 800;
-  padding: 2px 8px; border-radius: 999px; margin-right: 6px; vertical-align: middle;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-right: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.01em;
 }
 .badge.critical { background: var(--red); color: #fff; }
-.badge.warning { background: #d97706; color: #fff; }
+.badge.warning { background: var(--amber); color: #fff; } /* kontras >= 7:1 */
 .badge.ok { background: var(--green); color: #fff; }
-.badge.empty { background: #475569; color: #fff; }
+.badge.empty { background: #334155; color: #fff; }
 
 /* ---------- tabel ---------- */
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { width: 100%; border-collapse: collapse; font-size: 15px; background: #fff; }
-th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-th { background: #ecfeff; font-size: 13px; text-transform: uppercase; letter-spacing: 0.02em; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th, td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); text-align: left; vertical-align: top; }
+th { background: #ecfeff; font-size: 13px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 tr.clickable { cursor: pointer; }
+.action-group { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ---------- bottom nav ---------- */
 .bottomnav {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   background: #fff;
-  border-top: 1px solid var(--border);
+  border-top: 1.5px solid var(--border);
   display: flex;
   z-index: 20;
-  /* Naik di atas bilah gestur Android (back/home): tanpa ini nav mentok
-     ke ujung bawah layar dan bentrok sama tombol sistem HP. */
   padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
 }
 .nav-item {
   flex: 1;
-  display: flex; flex-direction: column; align-items: center;
-  padding: 8px 0 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 6px 2px 4px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+  border-top: 3px solid transparent;
 }
-.nav-item:hover { text-decoration: none; color: var(--teal); }
+.nav-item:hover { text-decoration: none; color: var(--teal-dark); }
+.nav-item.active {
+  color: var(--teal-dark);
+  border-top-color: var(--teal);
+  background: #ecfeff;
+}
 .nav-ico { font-size: 20px; line-height: 1.1; }
 
 /* ---------- login ---------- */
@@ -188,6 +335,15 @@ tr.clickable { cursor: pointer; }
 /* ---------- chart ---------- */
 .chart-box { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
 .chart-box svg { width: 100%; height: auto; display: block; }
+.chart-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0 8px;
+  color: var(--text);
+}
 .legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin-top: 6px; }
 .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 

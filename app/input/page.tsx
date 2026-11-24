@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { nowWIB, parseIDNumber } from "@/lib/alarms";
 import type { MeasurementRow, PointRow } from "@/lib/db";
 
@@ -43,6 +43,19 @@ export default function InputPage() {
   const [photoEnabled, setPhotoEnabled] = useState<boolean | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+  // Tahap unggah foto yang sedang berjalan ("Mengambil lokasi GPS..." lalu
+  // "Mengompres & mengunggah foto...") + nomor urut unggahan agar hasil
+  // unggahan basi (foto lama yang selesai belakangan) diabaikan.
+  const [photoStatus, setPhotoStatus] = useState("");
+  const photoSeq = useRef(0);
+  // Aksi mutasi (hapus/tambah) yang sedang berjalan — tombolnya dinonaktifkan
+  // selama diproses agar tidak ada klik ganda / request dobel di sinyal lemah.
+  const [mutating, setMutating] = useState(false);
+  // Banner pesan digulir ke area pandang agar langsung terlihat di HP.
+  const msgRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (msg) msgRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [msg]);
 
   const loadPoints = useCallback(async () => {
     setLoadingPoints(true);
@@ -74,8 +87,11 @@ export default function InputPage() {
 
   useEffect(() => {
     // Paralel (dulu berurutan: titik dulu, baru data) — dan form langsung
-    // tampil, tidak menunggu keduanya selesai.
-    void Promise.all([loadPoints(), loadRows(filterDate)]);
+    // tampil, tidak menunggu keduanya selesai. loadRows TIDAK dipanggil di
+    // sini: effect [filterDate, loadRows] di bawah sudah memuat data saat
+    // halaman dibuka, jadi memanggilnya dua kali hanya memboroskan kuota
+    // & memperlambat muat di sinyal lemah.
+    void loadPoints();
     fetch("/api/photos")
       .then((r) => r.json())
       .then((d) => setPhotoEnabled(d.enabled === true))
@@ -92,11 +108,94 @@ export default function InputPage() {
     setForm((f) => ({ ...f, date: wib.date, time: wib.time }));
   }
 
+  // Stempel bukti lapangan ala aplikasi Timestamp Camera: tanggal + jam
+  // WIB dan koordinat GPS dibakar langsung ke foto (bukan metadata EXIF),
+  // jadi buktinya kelihatan di gambarnya sendiri.
+  // GPS diambil dengan akurasi tinggi; kalau ditolak / tidak tersedia /
+  // timeout (~10 detik), stempel tetap jalan dengan "GPS tidak tersedia" —
+  // foto & pengukuran TIDAK PERNAH gagal karena GPS.
+  async function getGPS(): Promise<{ lat: number; lon: number } | null> {
+    if (!("geolocation" in navigator)) return null;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v: { lat: number; lon: number } | null) => {
+        if (!done) {
+          done = true;
+          resolve(v);
+        }
+      };
+      const timer = setTimeout(() => finish(null), 10000);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timer);
+          finish({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        },
+        () => {
+          clearTimeout(timer);
+          finish(null);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      );
+    });
+  }
+
+  function stampDateTimeWIB(): string {
+    const datePart = new Intl.DateTimeFormat("id-ID", {
+      timeZone: "Asia/Jakarta",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date());
+    return `${datePart} ${nowWIB().time} WIB`;
+  }
+
+  interface StampInfo {
+    pointName: string;
+    gps: { lat: number; lon: number } | null;
+    dateTime: string;
+  }
+
+  // Bar gelap semi-transparan di bawah foto dengan 3 baris teks putih:
+  // nama titik, koordinat GPS (6 desimal) atau "GPS tidak tersedia",
+  // dan tanggal + jam WIB. Ukuran huruf mengikuti lebar foto; bar tidak
+  // pernah menutup lebih dari ~35% tinggi foto.
+  function drawStamp(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, stamp: StampInfo) {
+    const lines = [
+      stamp.pointName,
+      stamp.gps ? `Lat ${stamp.gps.lat.toFixed(6)}, Lon ${stamp.gps.lon.toFixed(6)}` : "GPS tidak tersedia",
+      stamp.dateTime,
+    ];
+    let fontSize = Math.max(14, Math.min(34, Math.round(canvas.width * 0.024)));
+    const layout = (fs: number) => ({
+      padX: Math.round(fs * 0.6),
+      padY: Math.round(fs * 0.5),
+      lineHeight: Math.round(fs * 1.4),
+    });
+    let { padX, padY, lineHeight } = layout(fontSize);
+    let barH = padY * 2 + lineHeight * lines.length;
+    while (barH > canvas.height * 0.35 && fontSize > 12) {
+      fontSize -= 1;
+      ({ padX, padY, lineHeight } = layout(fontSize));
+      barH = padY * 2 + lineHeight * lines.length;
+    }
+    const y0 = canvas.height - barH;
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillRect(0, y0, canvas.width, barH);
+    ctx.fillStyle = "#fff";
+    ctx.font = `bold ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textBaseline = "top";
+    lines.forEach((line, i) => {
+      ctx.fillText(line, padX, y0 + padY + i * lineHeight, canvas.width - padX * 2);
+    });
+  }
+
   // Kompres foto di HP sebelum diunggah: sisi terpanjang maks 1280px,
-  // JPEG kualitas 70. createImageBitmap menangani orientasi EXIF (foto
-  // tegak dari kamera HP tidak jadi miring); fallback ke <img> bila
-  // browser tidak mendukung.
-  async function compressImage(file: File): Promise<Blob> {
+  // JPEG kualitas 70, lalu stempel tanggal/jam WIB + GPS dibakar ke bawah
+  // foto. createImageBitmap menangani orientasi EXIF (foto tegak dari
+  // kamera HP tidak jadi miring); fallback ke <img> bila browser tidak
+  // mendukung.
+  async function compressImage(file: File, stamp: StampInfo): Promise<Blob> {
     const MAX = 1280;
     const toBlob = (canvas: HTMLCanvasElement) =>
       new Promise<Blob>((resolve, reject) => {
@@ -115,6 +214,7 @@ export default function InputPage() {
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Gagal memproses foto.");
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      drawStamp(ctx, canvas, stamp);
       bitmap.close();
       return toBlob(canvas);
     }
@@ -133,6 +233,7 @@ export default function InputPage() {
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Gagal memproses foto.");
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      drawStamp(ctx, canvas, stamp);
       return toBlob(canvas);
     } finally {
       URL.revokeObjectURL(url);
@@ -143,19 +244,38 @@ export default function InputPage() {
     const file = e.target.files?.[0];
     e.target.value = ""; // boleh pilih file yang sama lagi
     if (!file) return;
+    if (!form.point_id) {
+      setMsg({ kind: "err", text: "Pilih titik ukur dulu sebelum mengambil foto." });
+      return;
+    }
+    const seq = ++photoSeq.current;
     setPhotoUploading(true);
     try {
-      const blob = await compressImage(file);
+      // GPS diambil dulu (maks ~10 detik, gagal = "GPS tidak tersedia"),
+      // lalu foto dikompres + distempel nama titik, koordinat, dan
+      // tanggal/jam WIB saat foto diambil.
+      setPhotoStatus("Mengambil lokasi GPS...");
+      const gps = await getGPS();
+      const pointName =
+        points.find((p) => String(p.id) === form.point_id)?.name ?? "Titik ukur";
+      setPhotoStatus("Mengompres & mengunggah foto...");
+      const blob = await compressImage(file, {
+        pointName,
+        gps,
+        dateTime: stampDateTimeWIB(),
+      });
       const fd = new FormData();
       fd.append("file", blob, "foto.jpg");
       const res = await fetch("/api/photos", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "Gagal mengunggah foto.");
-      setPhotoUrl(data.url);
+      // Abaikan hasil unggahan basi bila pengguna sudah memilih foto lain.
+      if (seq === photoSeq.current) setPhotoUrl(data.url);
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof Error ? err.message : "Gagal mengunggah foto." });
     } finally {
       setPhotoUploading(false);
+      setPhotoStatus("");
     }
   }
 
@@ -166,9 +286,24 @@ export default function InputPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
+    if (!form.point_id) return setMsg({ kind: "err", text: "Pilih titik ukur dulu." });
+    // Validasi eksplisit per kolom: teks yang diketik tapi gagal di-parse
+    // (misal tekanan "1..05") atau bernilai negatif ditolak dengan pesan
+    // yang menyebut kolomnya — jangan diam-diam tersimpan sebagai null.
+    if (!form.is_empty) {
+      if (form.debit.trim() !== "") {
+        const d = parseIDNumber(form.debit);
+        if (d === null || d < 0)
+          return setMsg({ kind: "err", text: `Debit "${form.debit}" tidak valid — periksa lagi angkanya (boleh pakai koma, contoh 6,55).` });
+      }
+      if (form.pressure.trim() !== "") {
+        const p = parseIDNumber(form.pressure);
+        if (p === null || p < 0)
+          return setMsg({ kind: "err", text: `Tekanan "${form.pressure}" tidak valid — periksa lagi angkanya (boleh pakai koma, contoh 1,05).` });
+      }
+    }
     const debit = form.is_empty ? null : parseIDNumber(form.debit);
     const pressure = form.is_empty ? null : parseIDNumber(form.pressure);
-    if (!form.point_id) return setMsg({ kind: "err", text: "Pilih titik ukur dulu." });
     if (!form.is_empty && debit === null && pressure === null) {
       return setMsg({ kind: "err", text: "Isi debit atau tekanan (boleh pakai koma, contoh 6,55) — atau tandai Kosong." });
     }
@@ -191,11 +326,22 @@ export default function InputPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "Gagal menyimpan.");
-      setMsg({ kind: "ok", text: form.id ? "Pengukuran diperbarui." : "Pengukuran tersimpan." });
-      setForm((f) => ({ ...emptyForm(), point_id: f.point_id }));
+      // Titik di-reset setelah simpan (jangan dipertahankan) supaya ronde
+      // ke titik berikutnya tidak mudah tersimpan di bawah nama titik lama;
+      // pesan konfirmasi menyebut nama titik yang tersimpan.
+      const savedPointName =
+        points.find((p) => String(p.id) === form.point_id)?.name ?? "Titik ukur";
+      setMsg({ kind: "ok", text: form.id ? `Pengukuran ${savedPointName} diperbarui.` : `Pengukuran ${savedPointName} tersimpan.` });
+      setForm(emptyForm());
       setPhotoUrl(null);
-      setFilterDate(form.date);
-      await loadRows(form.date);
+      // Muat ulang sekali saja: kalau tanggal filter sudah sama, panggil
+      // langsung; kalau beda, ganti filter dan biarkan effect yang memuat
+      // (jangan keduanya, nanti double-fetch lagi).
+      if (form.date === filterDate) {
+        await loadRows(form.date);
+      } else {
+        setFilterDate(form.date);
+      }
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof Error ? err.message : "Gagal menyimpan." });
     } finally {
@@ -218,45 +364,68 @@ export default function InputPage() {
   }
 
   async function deleteRow(id: number) {
-    const res = await fetch(`/api/measurements?id=${id}`, { method: "DELETE" });
-    const data = await res.json();
-    setConfirmDeleteId(null);
-    if (data.ok) {
-      setMsg({ kind: "ok", text: "Pengukuran dihapus." });
-      await loadRows(filterDate);
-    } else {
-      setMsg({ kind: "err", text: data.error || "Gagal menghapus." });
+    if (mutating) return;
+    setMutating(true);
+    try {
+      const res = await fetch(`/api/measurements?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      setConfirmDeleteId(null);
+      if (data.ok) {
+        setMsg({ kind: "ok", text: "Pengukuran dihapus." });
+        await loadRows(filterDate);
+      } else {
+        setMsg({ kind: "err", text: data.error || "Gagal menghapus." });
+      }
+    } catch {
+      setMsg({ kind: "err", text: "Gagal menghapus — periksa koneksi." });
+    } finally {
+      setMutating(false);
     }
   }
 
   async function addPoint(e: React.FormEvent) {
     e.preventDefault();
-    if (!newPoint.trim()) return;
-    const res = await fetch("/api/points", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newPoint.trim() }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      setNewPoint("");
-      setMsg({ kind: "ok", text: `Titik "${newPoint.trim()}" ditambahkan.` });
-      await loadPoints();
-    } else {
-      setMsg({ kind: "err", text: data.error || "Gagal menambah titik." });
+    if (!newPoint.trim() || mutating) return;
+    setMutating(true);
+    try {
+      const res = await fetch("/api/points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newPoint.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setNewPoint("");
+        setMsg({ kind: "ok", text: `Titik "${newPoint.trim()}" ditambahkan.` });
+        await loadPoints();
+      } else {
+        setMsg({ kind: "err", text: data.error || "Gagal menambah titik." });
+      }
+    } catch {
+      setMsg({ kind: "err", text: "Gagal menambah titik — periksa koneksi." });
+    } finally {
+      setMutating(false);
     }
   }
 
   async function deletePoint(id: number, name: string) {
-    const res = await fetch(`/api/points?id=${id}`, { method: "DELETE" });
-    const data = await res.json();
-    setConfirmDeletePointId(null);
-    if (data.ok) {
-      setMsg({ kind: "ok", text: `Titik "${name}" dihapus.` });
-      await loadPoints();
-      await loadRows(filterDate);
-    } else {
-      setMsg({ kind: "err", text: data.error || "Gagal menghapus titik." });
+    if (mutating) return;
+    setMutating(true);
+    try {
+      const res = await fetch(`/api/points?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      setConfirmDeletePointId(null);
+      if (data.ok) {
+        setMsg({ kind: "ok", text: `Titik "${name}" dihapus.` });
+        await loadPoints();
+        await loadRows(filterDate);
+      } else {
+        setMsg({ kind: "err", text: data.error || "Gagal menghapus titik." });
+      }
+    } catch {
+      setMsg({ kind: "err", text: "Gagal menghapus titik — periksa koneksi." });
+    } finally {
+      setMutating(false);
     }
   }
 
@@ -265,7 +434,7 @@ export default function InputPage() {
       <h1>Input Ukur</h1>
       <p className="lead">Catat debit &amp; tekanan tiap titik. Tanggal &amp; jam terisi otomatis (WIB), bisa diubah untuk input susulan.</p>
 
-      {msg && <div className={msg.kind === "ok" ? "success" : "error"}>{msg.text}</div>}
+      {msg && <div ref={msgRef} role="alert" className={msg.kind === "ok" ? "success" : "error"}>{msg.text}</div>}
 
       <form className="card" onSubmit={submit}>
         <h3>{form.id ? "Ubah Pengukuran" : "Pengukuran Baru"}</h3>
@@ -284,7 +453,23 @@ export default function InputPage() {
         </button>
 
         <label htmlFor="point">Titik Ukur</label>
-        <select id="point" value={form.point_id} onChange={(e) => setForm({ ...form, point_id: e.target.value })} required disabled={loadingPoints}>
+        <select
+          id="point"
+          value={form.point_id}
+          onChange={(e) => {
+            const nextPoint = e.target.value;
+            // Foto distempel nama titik — kalau titik diganti setelah foto
+            // diambil, foto lama ikut dihapus supaya tidak tersimpan di
+            // bawah nama titik yang salah.
+            if (nextPoint !== form.point_id && photoUrl) {
+              setPhotoUrl(null);
+              setMsg({ kind: "ok", text: "Titik diganti — foto sebelumnya dihapus, ambil foto baru untuk titik ini." });
+            }
+            setForm({ ...form, point_id: nextPoint });
+          }}
+          required
+          disabled={loadingPoints}
+        >
           <option value="">{loadingPoints ? "Memuat titik..." : "— Pilih titik —"}</option>
           {points.map((p) => (
             <option key={p.id} value={p.id}>
@@ -331,6 +516,20 @@ export default function InputPage() {
           <p className="hint">Fitur foto belum diaktifkan — penyimpanan foto (Vercel Blob) belum diatur. Pengukuran tetap bisa disimpan tanpa foto.</p>
         ) : (
           <>
+            {/* Tombol kamera ramah jempol (48px): titik harus dipilih dulu
+                supaya stempel foto tidak memakai nama generik "Titik ukur". */}
+            <label
+              htmlFor="photo"
+              className={`file-trigger${photoUploading ? " disabled" : ""}`}
+              onClick={(e) => {
+                if (!form.point_id) {
+                  e.preventDefault();
+                  setMsg({ kind: "err", text: "Pilih titik ukur dulu sebelum mengambil foto." });
+                }
+              }}
+            >
+              {photoUploading ? photoStatus || "Mengunggah foto..." : "Ambil Foto"}
+            </label>
             <input
               id="photo"
               type="file"
@@ -338,9 +537,10 @@ export default function InputPage() {
               capture="environment"
               onChange={onPhotoChange}
               disabled={photoUploading}
+              className="sr-only"
             />
-            <p className="hint">Foto diambil dari kamera HP, otomatis dikompres (maks 1280px) sebelum diunggah.</p>
-            {photoUploading && <p className="muted">Mengunggah foto...</p>}
+            <p className="hint">Foto diambil dari kamera HP, otomatis dikompres (maks 1280px) dan diberi stempel nama titik, koordinat GPS, dan tanggal + jam (WIB) di bawah foto sebelum diunggah.</p>
+            {photoUploading && <p className="muted">{photoStatus}</p>}
             {photoUrl && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
                 <a href={photoUrl} target="_blank" rel="noreferrer">
@@ -355,8 +555,11 @@ export default function InputPage() {
         )}
 
         <div className="btn-row">
-          <button className="btn" type="submit" disabled={busy}>
-            {busy ? "Menyimpan..." : form.id ? "Simpan Perubahan" : "Simpan Pengukuran"}
+          {/* Tombol simpan ikut nonaktif selama foto/GPS masih diunggah —
+              kalau tidak, foto bisa hilang (tersimpan photo_url: null) atau
+              malah menempel ke form kosong titik berikutnya. */}
+          <button className="btn" type="submit" disabled={busy || photoUploading}>
+            {busy ? "Menyimpan..." : photoUploading ? "Mengunggah foto..." : form.id ? "Simpan Perubahan" : "Simpan Pengukuran"}
           </button>
           {form.id && (
             <button type="button" className="btn btn-secondary" onClick={() => { setForm(emptyForm()); setPhotoUrl(null); }}>
@@ -409,20 +612,20 @@ export default function InputPage() {
                     )}
                   </td>
                   <td>
-                    <button className="btn btn-secondary" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => editRow(r)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => editRow(r)} disabled={mutating}>
                       Ubah
                     </button>{" "}
                     {confirmDeleteId === r.id ? (
                       <>
-                        <button className="btn btn-danger" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => deleteRow(r.id)}>
+                        <button className="btn btn-danger btn-sm" onClick={() => deleteRow(r.id)} disabled={mutating}>
                           Yakin hapus?
                         </button>{" "}
-                        <button className="btn btn-secondary" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => setConfirmDeleteId(null)}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setConfirmDeleteId(null)} disabled={mutating}>
                           Batal
                         </button>
                       </>
                     ) : (
-                      <button className="btn btn-danger" style={{ padding: "6px 10px", minHeight: 36 }} onClick={() => setConfirmDeleteId(r.id)}>
+                      <button className="btn btn-danger btn-sm" onClick={() => setConfirmDeleteId(r.id)} disabled={mutating}>
                         Hapus
                       </button>
                     )}
@@ -441,37 +644,43 @@ export default function InputPage() {
         </div>
       </div>
 
-      <h2>Kelola Titik Ukur</h2>
-      <form className="card" onSubmit={addPoint}>
-        <label htmlFor="newPoint">Tambah titik baru</label>
-        <input id="newPoint" type="text" value={newPoint} onChange={(e) => setNewPoint(e.target.value)} placeholder="Nama titik, contoh: Reservoir Baru" />
-        <div style={{ marginTop: 10 }}>
-          <button className="btn btn-secondary" type="submit">
-            Tambah Titik
-          </button>
-        </div>
-      </form>
-      <div className="card">
-        {points.map((p) => (
-          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-            <span>{p.name}</span>
-            {confirmDeletePointId === p.id ? (
-              <span>
-                <button className="btn btn-danger" style={{ padding: "4px 10px", minHeight: 32, fontSize: 14 }} onClick={() => deletePoint(p.id, p.name)}>
-                  Yakin hapus?
-                </button>{" "}
-                <button className="btn btn-secondary" style={{ padding: "4px 10px", minHeight: 32, fontSize: 14 }} onClick={() => setConfirmDeletePointId(null)}>
-                  Batal
-                </button>
-              </span>
-            ) : (
-              <button className="btn btn-danger" style={{ padding: "4px 10px", minHeight: 32, fontSize: 14 }} onClick={() => setConfirmDeletePointId(p.id)}>
-                Hapus
-              </button>
-            )}
+      {/* Kelola Titik Ukur disembunyikan di balik <details> yang tertutup
+          secara default: ini aksi administratif yang jarang dipakai, dan
+          tombol Hapus master titik tidak boleh terbuka langsung di layar
+          input harian (rawan salah sentuh di lapangan). */}
+      <details className="admin-box">
+        <summary>Kelola Titik Ukur</summary>
+        <form className="card" onSubmit={addPoint} style={{ marginTop: 12 }}>
+          <label htmlFor="newPoint">Tambah titik baru</label>
+          <input id="newPoint" type="text" value={newPoint} onChange={(e) => setNewPoint(e.target.value)} placeholder="Nama titik, contoh: Reservoir Baru" />
+          <div style={{ marginTop: 10 }}>
+            <button className="btn btn-secondary" type="submit" disabled={mutating}>
+              Tambah Titik
+            </button>
           </div>
-        ))}
-      </div>
+        </form>
+        <div className="card">
+          {points.map((p) => (
+            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+              <span>{p.name}</span>
+              {confirmDeletePointId === p.id ? (
+                <span>
+                  <button className="btn btn-danger btn-sm" onClick={() => deletePoint(p.id, p.name)} disabled={mutating}>
+                    Yakin hapus?
+                  </button>{" "}
+                  <button className="btn btn-secondary btn-sm" onClick={() => setConfirmDeletePointId(null)} disabled={mutating}>
+                    Batal
+                  </button>
+                </span>
+              ) : (
+                <button className="btn btn-danger btn-sm" onClick={() => setConfirmDeletePointId(p.id)} disabled={mutating}>
+                  Hapus
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }
