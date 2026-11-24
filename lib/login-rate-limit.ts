@@ -66,14 +66,22 @@ export function clearLoginAttempts(ip: string): void {
   attempts.delete(ip);
 }
 
-/** Ambil IP klien dari header (Vercel menaruhnya di x-forwarded-for). */
+/** Ambil IP klien dari header.
+ * Vercel menaruh IP asli di x-real-ip, dan MENAMBAHKAN IP asli di akhir
+ * x-forwarded-for. Entri PERTAMA x-forwarded-for JANGAN dipakai — itu
+ * bisa dipalsukan pengirim (attacker kirim "x-forwarded-for: 1.2.3.4"
+ * lalu Vercel menambahkan IP asli di belakangnya). Jadi: pakai
+ * x-real-ip kalau ada, kalau tidak ambil entri TERAKHIR x-forwarded-for. */
 export function getClientIp(
   headers: { get(name: string): string | null },
 ): string {
+  const realIp = headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
   const forwarded = headers.get("x-forwarded-for");
   if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
+    const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last) return last;
   }
   return "unknown";
 }

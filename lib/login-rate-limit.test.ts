@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   __resetLoginAttempts,
   clearLoginAttempts,
+  getClientIp,
   isLoginBlocked,
   LOGIN_BLOCK_MS,
   LOGIN_MAX_ATTEMPTS,
@@ -75,5 +76,39 @@ describe("clearLoginAttempts", () => {
       recordLoginFailure(IP, T0 + 60_000 + i * 1000);
     }
     expect(isLoginBlocked(IP, T0 + 120_000)).toBe(false);
+  });
+});
+
+function headersStub(values: Record<string, string>) {
+  return {
+    get(name: string) {
+      return values[name.toLowerCase()] ?? null;
+    },
+  };
+}
+
+describe("getClientIp", () => {
+  it("memakai x-real-ip kalau ada", () => {
+    expect(
+      getClientIp(
+        headersStub({
+          "x-real-ip": "203.0.113.7",
+          "x-forwarded-for": "1.2.3.4, 203.0.113.7",
+        }),
+      ),
+    ).toBe("203.0.113.7");
+  });
+
+  it("mengambil entri TERAKHIR x-forwarded-for (entri pertama bisa dipalsukan)", () => {
+    // Attacker mengirim 1.2.3.4, proxy menambahkan IP asli di belakang.
+    expect(
+      getClientIp(
+        headersStub({ "x-forwarded-for": "1.2.3.4, 198.51.100.9" }),
+      ),
+    ).toBe("198.51.100.9");
+  });
+
+  it("mengembalikan unknown kalau tidak ada header IP", () => {
+    expect(getClientIp(headersStub({}))).toBe("unknown");
   });
 });
