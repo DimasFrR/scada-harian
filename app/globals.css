@@ -92,17 +92,17 @@ textarea:focus-visible {
 .container { max-width: 1120px; margin: 0 auto; padding: 14px 12px 24px; position: relative; z-index: 1; }
 
 /* Latar dekoratif: siluet reservoir + menara air di dasar halaman,
-   samar (opacity 0.12) supaya teks tetap terbaca di bawah matahari;
-   kartu konten tetap di atasnya (z-index .container). Teks sendiri
-   duduk di atas kartu putih solid, jadi latar tidak mengganggu
-   keterbacaan — 0.07 sempat dicoba dan terlalu pudar sampai tidak
-   kelihatan. */
+   setengah layar tingginya (50vh) sesuai permintaan — ini siluet
+   doang, jadi aman. Samar (opacity 0.12) supaya teks tetap terbaca
+   di bawah matahari; kartu konten tetap di atasnya (z-index
+   .container). Teks sendiri duduk di atas kartu putih solid, jadi
+   latar tidak mengganggu keterbacaan. */
 .bg-decor {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 190px;
+  height: 50vh;
   z-index: 0;
   pointer-events: none;
   color: var(--teal);

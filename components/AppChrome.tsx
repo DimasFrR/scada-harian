@@ -53,21 +53,21 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           Dekoratif saja (aria-hidden), sangat samar agar tidak mengganggu
           keterbacaan di bawah matahari. */}
       <div className="bg-decor" aria-hidden="true">
-        <svg viewBox="0 0 1440 160" preserveAspectRatio="xMidYMax slice">
-          <path d="M0 108 Q 360 58 720 98 T 1440 88 V160 H0 Z" opacity="0.45" />
-          <path d="M0 132 Q 400 92 800 126 T 1440 122 V160 H0 Z" />
+        <svg viewBox="0 0 1440 360" preserveAspectRatio="xMidYMax slice">
+          <path d="M0 240 Q 360 160 720 220 T 1440 200 V360 H0 Z" opacity="0.45" />
+          <path d="M0 290 Q 400 220 800 280 T 1440 270 V360 H0 Z" />
           {/* Menara air */}
-          <ellipse cx="245" cy="32" rx="78" ry="10" />
-          <rect x="168" y="32" width="154" height="54" rx="10" />
-          <path d="M182 86 V144 M222 86 V144 M262 86 V144 M302 86 V144 M186 104 L302 128 M302 104 L186 128" stroke="currentColor" strokeWidth="6" fill="none" />
+          <ellipse cx="560" cy="70" rx="85" ry="12" />
+          <rect x="475" y="70" width="170" height="120" rx="12" />
+          <path d="M490 190 V320 M530 190 V320 M570 190 V320 M610 190 V320 M494 215 L606 275 M606 215 L494 275" stroke="currentColor" strokeWidth="8" fill="none" />
           {/* Rumah pompa */}
-          <path d="M796 110 L854 82 L912 110 Z" />
-          <rect x="806" y="108" width="96" height="38" rx="2" />
+          <path d="M675 242 L730 205 L785 242 Z" />
+          <rect x="685" y="240" width="90" height="80" rx="2" />
           {/* Reservoir */}
-          <rect x="1170" y="58" width="20" height="6" rx="2" />
-          <rect x="1174" y="62" width="12" height="18" />
-          <path d="M1058 92 Q 1180 52 1302 92 Z" />
-          <rect x="1058" y="92" width="244" height="52" rx="8" />
+          <rect x="952" y="130" width="22" height="8" rx="2" />
+          <rect x="957" y="136" width="12" height="22" />
+          <path d="M820 200 Q 960 150 1100 200 Z" />
+          <rect x="820" y="200" width="280" height="120" rx="10" />
         </svg>
       </div>
       <main className="container">{children}</main>
