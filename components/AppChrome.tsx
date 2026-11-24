@@ -4,9 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-// Header + bottom nav. Disembunyikan di halaman login: dulu nav tetap
-// tampil di /login, jadi ketuk menu saat belum login langsung dilempar
-// balik ke /login — kelihatan seperti aplikasi mental/bug.
+// Navigasi utama — dipakai bersama oleh sidebar desktop & bottom nav HP.
+// Hanya 5 halaman produksi yang nyata: Dashboard, Input Ukur, Data, Tren,
+// Bulanan. Mingguan/Zona DMA hanya ada di prototipe, bukan di sini.
+const NAV_ITEMS = [
+  { href: "/", label: "Dashboard", icon: "▦" },
+  { href: "/input", label: "Input Ukur", icon: "✎" },
+  { href: "/data", label: "Data", icon: "☰" },
+  { href: "/tren", label: "Tren", icon: "↗" },
+  { href: "/bulanan", label: "Bulanan", icon: "▤" },
+];
+
+// Header + bottom nav (HP) + sidebar kiri (desktop >=1024px).
+// Disembunyikan di halaman login: dulu nav tetap tampil di /login, jadi
+// ketuk menu saat belum login langsung dilempar balik ke /login —
+// kelihatan seperti aplikasi mental/bug.
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLogin = pathname === "/login";
@@ -27,9 +39,11 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
     window.location.href = "/login";
   }
 
+  const logoutLabel = confirmLogout ? "Yakin keluar?" : "Keluar";
+
   return (
     <>
-      <header className="topbar">
+      <header className={isLogin ? "topbar topbar-login" : "topbar"}>
         <div className="topbar-inner">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img src="/logo.png" alt="Logo Tirta Sukapura" width={44} height={44} style={{ borderRadius: "50%", flexShrink: 0 }} />
@@ -44,7 +58,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
               className={confirmLogout ? "logout-btn confirm" : "logout-btn"}
               onClick={confirmLogout ? logout : () => setConfirmLogout(true)}
             >
-              {confirmLogout ? "Yakin keluar?" : "Keluar"}
+              {logoutLabel}
             </button>
           )}
         </div>
@@ -70,29 +84,55 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           <rect x="820" y="200" width="280" height="120" rx="10" />
         </svg>
       </div>
-      <main className="container">{children}</main>
+      <div className="app-shell">
+        {!isLogin && (
+          <aside className="sidebar" aria-label="Navigasi utama">
+            <div className="side-brand">
+              <img src="/logo.png" alt="Logo Tirta Sukapura" width={44} height={44} style={{ borderRadius: "50%", flexShrink: 0 }} />
+              <div>
+                <div className="side-brand-name">SCADA Harian</div>
+                <div className="side-brand-sub">Perumda Air Minum Tirta Sukapura</div>
+              </div>
+            </div>
+            <nav className="side-nav">
+              {NAV_ITEMS.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`side-item${pathname === item.href ? " active" : ""}`}
+                  aria-current={pathname === item.href ? "page" : undefined}
+                >
+                  <span className="nav-ico" aria-hidden="true">{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </nav>
+            <button
+              type="button"
+              className={confirmLogout ? "sidebar-logout confirm" : "sidebar-logout"}
+              onClick={confirmLogout ? logout : () => setConfirmLogout(true)}
+            >
+              {logoutLabel}
+            </button>
+          </aside>
+        )}
+        <div className="app-main">
+          <main className="container">{children}</main>
+        </div>
+      </div>
       {!isLogin && (
         <nav className="bottomnav" aria-label="Navigasi utama">
-          <Link href="/" className={`nav-item${pathname === "/" ? " active" : ""}`} aria-current={pathname === "/" ? "page" : undefined}>
-            <span className="nav-ico" aria-hidden="true">▦</span>
-            <span>Dashboard</span>
-          </Link>
-          <Link href="/input" className={`nav-item${pathname === "/input" ? " active" : ""}`} aria-current={pathname === "/input" ? "page" : undefined}>
-            <span className="nav-ico" aria-hidden="true">✎</span>
-            <span>Input Ukur</span>
-          </Link>
-          <Link href="/data" className={`nav-item${pathname === "/data" ? " active" : ""}`} aria-current={pathname === "/data" ? "page" : undefined}>
-            <span className="nav-ico" aria-hidden="true">☰</span>
-            <span>Data</span>
-          </Link>
-          <Link href="/tren" className={`nav-item${pathname === "/tren" ? " active" : ""}`} aria-current={pathname === "/tren" ? "page" : undefined}>
-            <span className="nav-ico" aria-hidden="true">↗</span>
-            <span>Tren</span>
-          </Link>
-          <Link href="/bulanan" className={`nav-item${pathname === "/bulanan" ? " active" : ""}`} aria-current={pathname === "/bulanan" ? "page" : undefined}>
-            <span className="nav-ico" aria-hidden="true">▤</span>
-            <span>Bulanan</span>
-          </Link>
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`nav-item${pathname === item.href ? " active" : ""}`}
+              aria-current={pathname === item.href ? "page" : undefined}
+            >
+              <span className="nav-ico" aria-hidden="true">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
+          ))}
         </nav>
       )}
     </>
