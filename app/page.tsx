@@ -1,6 +1,7 @@
 import Link from "next/link";
 import PdfButton, { type PdfAlarm, type PdfRow } from "@/components/PdfButton";
 import PrintButton from "@/components/PrintButton";
+import TrendChart from "@/components/TrendChart";
 import { computeAlarm, formatID, formatNum, monthNameID, nowWIB } from "@/lib/alarms";
 import { fmtPct2 } from "@/lib/monthly";
 import { getWaTargets, isWaConfigured } from "@/lib/whatsapp";
@@ -75,6 +76,12 @@ export default async function DashboardPage() {
   }));
   const critical = alarms.filter((a) => a.alarm.level === "critical");
   const warning = alarms.filter((a) => a.alarm.level === "warning");
+
+  // Grafik Pencatatan per Ronde — 8 ronde terakhir (tanggal + jumlah titik
+  // terukur per ronde), dihitung dari baris bacaan yang sama. Rincian
+  // Anomali memakai hitungan alarm di atas + titik yang belum diukur.
+  const rounds = roundSeries(allRows, 8);
+  const anomalyOk = alarms.filter((a) => a.alarm.level === "ok").length;
 
   // Kartu progres Hari / Minggu / Bulan Ini — dihitung dari baris bacaan
   // asli (tanggal WIB hari ini), bukan angka contoh.
@@ -166,6 +173,24 @@ export default async function DashboardPage() {
           <Link href="/input">Input Ukur</Link>.
         </div>
       )}
+
+      {/* Grafik inline seperti prototipe: garis pencatatan per ronde +
+          donat rincian anomali, berdampingan di desktop, bertumpuk di HP. */}
+      <div className="dash-charts">
+        <TrendChart
+          title="Grafik Pencatatan per Ronde"
+          unit="titik"
+          points={rounds.map((r) => ({ date: r.date, time: "", value: r.measured }))}
+          color="#0e7c5f"
+          countLabel="ronde"
+        />
+        <AnomalyDonut
+          ok={anomalyOk}
+          warning={warning.length}
+          critical={critical.length}
+          unmeasured={unmeasured.length}
+        />
+      </div>
 
       <h2>Pengukuran Terbaru</h2>
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -328,6 +353,96 @@ function periodStats(allRows: MeasurementRow[], fromDate: string): PeriodStats {
     if (latest.is_empty) empty++;
   }
   return { measured, rounds: dates.size, critical, warning, empty };
+}
+
+/** Ronde laporan: tanggal berbeda + jumlah titik berbeda yang terukur
+ *  pada tanggal itu. Diambil N tanggal terbaru, diurutkan tertua dulu
+ *  supaya garis bergerak maju dari kiri ke kanan. */
+function roundSeries(allRows: MeasurementRow[], take: number): { date: string; measured: number }[] {
+  const byDate = new Map<string, Set<number>>();
+  for (const r of allRows) {
+    const ids = byDate.get(r.date);
+    if (ids) ids.add(r.point_id);
+    else byDate.set(r.date, new Set([r.point_id]));
+  }
+  return [...byDate.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-take)
+    .map(([date, ids]) => ({ date, measured: ids.size }));
+}
+
+/** Donat status bacaan terbaru tiap titik + titik yang belum diukur.
+ *  Warna mengikuti semantik alarm: normal aqua, peringatan amber,
+ *  kritis merah, belum diukur abu-abu. */
+function AnomalyDonut({
+  ok,
+  warning,
+  critical,
+  unmeasured,
+}: {
+  ok: number;
+  warning: number;
+  critical: number;
+  unmeasured: number;
+}) {
+  const total = ok + warning + critical + unmeasured;
+  if (total === 0) {
+    return (
+      <section className="chart-box" aria-label="Rincian Anomali">
+        <h3>Rincian Anomali</h3>
+        <p className="muted">Belum ada data untuk grafik ini.</p>
+      </section>
+    );
+  }
+  const segments = [
+    { label: "Normal", count: ok, color: "var(--aqua-dark)", cls: "" },
+    { label: "Peringatan", count: warning, color: "var(--amber)", cls: "warn" },
+    { label: "Kritis", count: critical, color: "var(--red)", cls: "crit" },
+    { label: "Belum diukur", count: unmeasured, color: "var(--border)", cls: "" },
+  ];
+  // Berhenti conic-gradient bertahap agar tiap segmen menempati porsi
+  // sesuai jumlahnya; segmen 0 titik dilewati supaya tidak muncul
+  // sebagai garis tipis di batas segmen lain.
+  let acc = 0;
+  const stops = segments
+    .map((s) => {
+      const pct = (s.count / total) * 100;
+      const from = acc;
+      acc += pct;
+      return { s, from, to: acc };
+    })
+    .filter(({ s }) => s.count > 0)
+    .map(({ s, from, to }) => `${s.color} ${from}% ${to}%`)
+    .join(", ");
+  return (
+    <section className="chart-box" aria-label="Rincian Anomali">
+      <h3>Rincian Anomali</h3>
+      <div className="donut-wrap">
+        <div
+          className="donut-ring"
+          style={{ background: `conic-gradient(${stops})` }}
+          role="img"
+          aria-label={`Normal ${ok}, Peringatan ${warning}, Kritis ${critical}, Belum diukur ${unmeasured} dari ${total} titik`}
+        >
+          <span>
+            <b>{total}</b>
+            <small>titik</small>
+          </span>
+        </div>
+        <ul className="donut-legend">
+          {segments.map((s) => (
+            <li key={s.label}>
+              <span className={s.cls}>
+                <i className="dot" style={{ background: s.color }} />
+                {s.label}
+              </span>
+              <b className={s.cls}>{s.count} titik</b>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
 }
 
 function ProgressCard({

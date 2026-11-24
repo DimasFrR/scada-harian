@@ -463,6 +463,32 @@ tr.clickable { cursor: pointer; }
 .legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin-top: 6px; }
 .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 
+/* ---------- grafik inline Dashboard (ronde + anomali) ---------- */
+/* Bertumpuk di HP, berdampingan di layar lebar — grafik lebih lebar
+   dari donat supaya 8 label tanggal muat. */
+.dash-charts { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
+.dash-charts .chart-box { margin-bottom: 0; }
+.donut-wrap { display: flex; gap: 14px; align-items: center; padding: 4px 2px; }
+.donut-ring {
+  width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.donut-ring > span {
+  width: 70px; height: 70px; border-radius: 50%; background: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--ocean); font-variant-numeric: tabular-nums;
+}
+.donut-ring > span b { font-size: 20px; line-height: 1.1; }
+.donut-ring > span small { font-size: 12px; color: var(--muted); }
+.donut-legend { flex: 1; list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
+.donut-legend li { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; }
+.donut-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.donut-legend .crit { color: var(--red); font-weight: 700; }
+.donut-legend .warn { color: var(--amber); font-weight: 700; }
+@media (min-width: 768px) {
+  .dash-charts { grid-template-columns: 1.8fr 1fr; }
+}
+
 @media (min-width: 640px) {
   .kpi-grid { grid-template-columns: repeat(4, 1fr); }
 }

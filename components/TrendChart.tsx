@@ -11,10 +11,12 @@ interface Props {
   unit: string;
   points: Pt[];
   color: string;
+  /** Satuan hitung di legenda, mis. "pengukuran" (default) atau "ronde". */
+  countLabel?: string;
 }
 
 /** Grafik garis SVG sederhana (tanpa dependensi) — debit atau tekanan per titik. */
-export default function TrendChart({ title, unit, points, color }: Props) {
+export default function TrendChart({ title, unit, points, color, countLabel = "pengukuran" }: Props) {
   const W = 640;
   const H = 220;
   const PAD_L = 52;
@@ -109,7 +111,7 @@ export default function TrendChart({ title, unit, points, color }: Props) {
       <div className="legend">
         <span>
           <span className="dot" style={{ background: color }} />
-          {title} ({unit}) — {points.length} pengukuran
+          {title} ({unit}) — {points.length} {countLabel}
         </span>
       </div>
     </div>
