@@ -56,9 +56,9 @@ function MonthlyBarChart({ rows }: { rows: { month: string; billed: number; loss
           const lH = ((base - PAD_T - 8) * r.loss) / maxV;
           return (
             <g key={r.month}>
-              <rect x={cx - barW - 2} y={base - bH} width={barW} height={bH} fill="#0e7490" />
+              <rect x={cx - barW - 2} y={base - bH} width={barW} height={bH} fill="#0e7c5f" />
               <rect x={cx + 2} y={base - lH} width={barW} height={lH} fill="#dc2626" />
-              <text x={cx - barW / 2 - 2} y={base - bH - 4} fontSize="11" textAnchor="middle" fill="#0e7490">
+              <text x={cx - barW / 2 - 2} y={base - bH - 4} fontSize="11" textAnchor="middle" fill="#0e7c5f">
                 {`${Math.round(r.billed / 1000)} rb`}
               </text>
               <text x={cx + barW / 2 + 2} y={base - lH - 4} fontSize="11" textAnchor="middle" fill="#dc2626">
@@ -73,7 +73,7 @@ function MonthlyBarChart({ rows }: { rows: { month: string; billed: number; loss
       </svg>
       <div className="legend">
         <span>
-          <span className="dot" style={{ background: "#0e7490" }} />
+          <span className="dot" style={{ background: "#0e7c5f" }} />
           Tertagih
         </span>
         <span>
@@ -388,7 +388,7 @@ export default function BulananPage() {
                       key={r.month}
                       style={
                         r.month === selected
-                          ? { background: "#ecfeff", fontWeight: 700 }
+                          ? { background: "#e6f4fb", fontWeight: 700 }
                           : undefined
                       }
                     >

@@ -88,10 +88,12 @@ export default function TrendChart({ title, unit, points, color }: Props) {
             </g>
           );
         })}
-        <path d={area} fill={color} opacity="0.12" />
-        <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
+        <path d={area} fill={color} opacity="0.12" className="trend-area" />
+        {/* Garis tergambar bertahap (CSS .trend-line + pathLength=1000):
+            animasi jalan saat komponen muncul, bukan langsung utuh. */}
+        <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" className="trend-line" pathLength={1000} />
         {points.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.value)} r="3.5" fill={color} stroke="#fff" strokeWidth="1" />
+          <circle key={i} cx={x(i)} cy={y(p.value)} r="3.5" fill={color} stroke="#fff" strokeWidth="1" className="trend-dot" />
         ))}
         {labelIdx.map((i) => {
           // Jepit label tanggal di dalam viewBox: dengan font 15px, label

@@ -1,11 +1,18 @@
-/* SCADA Harian — mobile-first, tema air (cyan/teal), kontras tinggi untuk pemakaian lapangan di bawah matahari. */
+/* SCADA Harian — mobile-first, palet kantor (ice blue / ocean / aqua green), kontras tinggi untuk pemakaian lapangan di bawah matahari. */
 :root {
-  --teal: #0e7490;
-  --teal-dark: #155e75;
-  --bg: #f0f9fa;
-  --card: #ffffff;
+  /* Palet kantor 60/30/10: Ice Blue latar, Ocean teks/judul, Aqua Green aksen.
+     Token --teal/--teal-dark lama diganti --ocean/--aqua. Nilai kontras
+     dari audit Neon dipertahankan: --muted, --amber, --border, --text, --red. */
+  --ocean: #14365e;
+  --ocean-2: #1a5a8c;
+  --aqua: #2fd3a0;
+  --aqua-dark: #0e7c5f;
+  --aqua-ink: #0b2b26; /* teks gelap di atas tombol aqua */
+  --aqua-hover: #25bd92;
+  --ice: #e6f4fb;
+  --bg: #e8f6fd;
   --text: #0f3d4c;
-  --muted: #475569; /* kontras >= 7:1 di atas putih & #f0f9fa (sebelumnya #64748b < 4.5:1 di --bg) */
+  --muted: #475569; /* kontras >= 7:1 di atas putih & latar ice blue (sebelumnya #64748b < 4.5:1) */
   --border: #94a3b8;
   --border-soft: #cbd5e1;
   --red: #b91c1c;
@@ -22,7 +29,10 @@ html, body { margin: 0; padding: 0; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  background: var(--bg);
+  /* Latar ice blue bergradasi (60% palet) — tetap terang supaya teks
+     tetap terbaca di bawah matahari. */
+  background: linear-gradient(180deg, #eaf7fd 0%, #d9edf9 100%);
+  background-attachment: fixed;
   color: var(--text);
   font-size: 16px;
   line-height: 1.5;
@@ -30,7 +40,7 @@ body {
   padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
-a { color: var(--teal); text-decoration: none; }
+a { color: var(--ocean-2); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 a:focus-visible,
@@ -39,13 +49,13 @@ summary:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid var(--teal-dark);
+  outline: 3px solid var(--ocean);
   outline-offset: 2px;
 }
 
 /* ---------- header ---------- */
 .topbar {
-  background: var(--teal);
+  background: var(--ocean);
   color: #fff;
   position: sticky;
   top: 0;
@@ -105,7 +115,7 @@ textarea:focus-visible {
   height: 50vh;
   z-index: 0;
   pointer-events: none;
-  color: var(--teal);
+  color: var(--ocean);
   opacity: 0.12;
 }
 .bg-decor svg { width: 100%; height: 100%; display: block; }
@@ -113,9 +123,14 @@ h1 { font-size: 22px; margin: 4px 0 4px; }
 h2 { font-size: 18px; margin: 20px 0 8px; }
 p.lead { color: var(--muted); margin: 0 0 12px; }
 
-/* ---------- kartu ---------- */
+/* ---------- kartu (glassy) ---------- */
+/* Kartu kaca: putih tembus pandang di atas latar ice blue. Teks tetap
+   duduk di atas permukaan hampir-putih, jadi kontras --text/--muted
+   dari audit Neon tidak berubah. */
 .card {
-  background: var(--card);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px;
@@ -130,8 +145,8 @@ p.lead { color: var(--muted); margin: 0 0 12px; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: var(--teal);
-  color: #fff;
+  background: var(--aqua);
+  color: var(--aqua-ink);
   border: none;
   border-radius: 10px;
   padding: 12px 16px;
@@ -141,14 +156,14 @@ p.lead { color: var(--muted); margin: 0 0 12px; }
   min-height: 48px;
   text-align: center;
 }
-.btn:hover { background: var(--teal-dark); text-decoration: none; }
+.btn:hover { background: var(--aqua-hover); text-decoration: none; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn-secondary {
   background: #fff;
-  color: var(--teal-dark);
-  border: 1.5px solid var(--teal);
+  color: var(--ocean);
+  border: 1.5px solid var(--ocean-2);
 }
-.btn-secondary:hover { background: #ecfeff; }
+.btn-secondary:hover { background: var(--ice); }
 .btn-danger { background: var(--red); color: #fff; }
 .btn-danger:hover { background: #991b1b; }
 .btn-sm {
@@ -191,7 +206,7 @@ input:disabled, select:disabled, textarea:disabled {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-  accent-color: var(--teal);
+  accent-color: var(--aqua-dark);
 }
 .check-row label { margin: 0; font-size: 15px; cursor: pointer; }
 .hint { font-size: 13px; color: var(--muted); margin-top: 4px; }
@@ -232,9 +247,9 @@ input:disabled, select:disabled, textarea:disabled {
   min-height: 48px;
   padding: 12px 16px;
   border-radius: 10px;
-  border: 1.5px dashed var(--teal);
-  background: #ecfeff;
-  color: var(--teal-dark);
+  border: 1.5px dashed var(--ocean-2);
+  background: var(--ice);
+  color: var(--ocean);
   font-weight: 700;
   font-size: 15px;
   cursor: pointer;
@@ -258,7 +273,9 @@ input:disabled, select:disabled, textarea:disabled {
 
 /* ---------- collapsible section (aksi administratif) ---------- */
 details.admin-box {
-  background: var(--card);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px 14px;
@@ -277,7 +294,9 @@ details.admin-box summary {
 /* ---------- dashboard ---------- */
 .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 .kpi {
-  background: var(--card);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1.5px solid var(--border);
   border-radius: 12px;
   padding: 12px;
@@ -317,7 +336,7 @@ details.admin-box summary {
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { width: 100%; border-collapse: collapse; font-size: 15px; background: #fff; }
 th, td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); text-align: left; vertical-align: top; }
-th { background: #ecfeff; font-size: 13px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text); }
+th { background: var(--ice); font-size: 13px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 tr.clickable { cursor: pointer; }
 .action-group { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -345,11 +364,11 @@ tr.clickable { cursor: pointer; }
   font-weight: 700;
   border-top: 3px solid transparent;
 }
-.nav-item:hover { text-decoration: none; color: var(--teal-dark); }
+.nav-item:hover { text-decoration: none; color: var(--ocean); }
 .nav-item.active {
-  color: var(--teal-dark);
-  border-top-color: var(--teal);
-  background: #ecfeff;
+  color: var(--ocean);
+  border-top-color: var(--aqua);
+  background: var(--ice);
 }
 .nav-ico { font-size: 20px; line-height: 1.1; }
 
@@ -357,7 +376,7 @@ tr.clickable { cursor: pointer; }
 .login-card { max-width: 420px; margin: 48px auto 0; }
 
 /* ---------- chart ---------- */
-.chart-box { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+.chart-box { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
 .chart-box svg { width: 100%; height: auto; display: block; }
 .chart-stats {
   display: flex;
@@ -373,6 +392,57 @@ tr.clickable { cursor: pointer; }
 
 @media (min-width: 640px) {
   .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ---------- kartu progres (Dashboard) ---------- */
+.progress-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
+.progress-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 0;
+}
+.progress-head { background: var(--ocean); color: #fff; padding: 10px 14px; }
+.progress-head h3 { color: #fff; margin: 0; font-size: 16px; }
+.progress-head .muted { color: rgba(255, 255, 255, 0.85); font-size: 13px; }
+.progress-body { display: flex; gap: 14px; align-items: center; padding: 12px 14px 4px; }
+.progress-ring {
+  width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.progress-ring > span {
+  width: 58px; height: 58px; border-radius: 50%; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 15px; color: var(--ocean);
+  font-variant-numeric: tabular-nums;
+}
+.progress-stats { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.progress-stats > div { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; }
+.progress-stats .crit { color: var(--red); font-weight: 700; }
+.progress-stats .warn { color: var(--amber); font-weight: 700; }
+.progress-note { padding: 0 14px 12px; margin: 0; }
+@media (min-width: 640px) {
+  .progress-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ---------- animasi garis tren (TrendChart) ---------- */
+/* Garis tergambar bertahap kiri-ke-kanan saat muncul: pathLength=1000
+   menormalkan dash ke panjang garis berapa pun titiknya. Area & titik
+   muncul menyusul (fade) supaya tidak mendahului garis. */
+.trend-line {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: trend-draw 1.2s ease-out forwards;
+}
+@keyframes trend-draw { to { stroke-dashoffset: 0; } }
+.trend-area { opacity: 0; animation: trend-fade 0.6s ease-out 0.5s forwards; }
+.trend-dot { opacity: 0; animation: trend-fade 0.5s ease-out 1s forwards; }
+@keyframes trend-fade { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .trend-line, .trend-area, .trend-dot { animation: none; stroke-dashoffset: 0; opacity: 1; }
 }
 
 /* ---------- print: laporan bersih ---------- */

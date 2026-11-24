@@ -89,8 +89,8 @@ export default function TrenPage() {
         <p className="muted" style={{ marginTop: 14 }}>Memuat data...</p>
       ) : (
         <div style={{ marginTop: 14 }}>
-          <TrendChart title={`Debit — ${selected?.name ?? ""}`} unit="L/dtk" points={debitPts} color="#0e7490" />
-          <TrendChart title={`Tekanan — ${selected?.name ?? ""}`} unit="bar" points={pressurePts} color="#b45309" />
+          <TrendChart title={`Debit — ${selected?.name ?? ""}`} unit="L/dtk" points={debitPts} color="#0e7c5f" />
+          <TrendChart title={`Tekanan — ${selected?.name ?? ""}`} unit="bar" points={pressurePts} color="#1a5a8c" />
         </div>
       )}
 
