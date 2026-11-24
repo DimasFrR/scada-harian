@@ -5,6 +5,10 @@
 // Password TIDAK PERNAH ditulis di kode — hanya dari env var APP_PASSWORD.
 
 export const SESSION_COOKIE = "scada_session";
+/** Sesi login berlaku 8 jam (satu hari kerja) lalu browser menghapus
+ * cookie-nya sendiri — user otomatis logout. Sebelumnya 7 hari, terlalu
+ * lama untuk aplikasi yang dipakai bergantian di lapangan/kantor. */
+export const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const SESSION_MESSAGE = "scada-harian-session-v1";
 
 function toHex(buf: ArrayBuffer): string {
