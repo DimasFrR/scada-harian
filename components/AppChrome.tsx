@@ -49,6 +49,27 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </header>
+      {/* Latar dekoratif: siluet reservoir + menara air di dasar halaman.
+          Dekoratif saja (aria-hidden), sangat samar agar tidak mengganggu
+          keterbacaan di bawah matahari. */}
+      <div className="bg-decor" aria-hidden="true">
+        <svg viewBox="0 0 1440 160" preserveAspectRatio="xMidYMax slice">
+          <path d="M0 108 Q 360 58 720 98 T 1440 88 V160 H0 Z" opacity="0.45" />
+          <path d="M0 132 Q 400 92 800 126 T 1440 122 V160 H0 Z" />
+          {/* Menara air */}
+          <ellipse cx="245" cy="32" rx="78" ry="10" />
+          <rect x="168" y="32" width="154" height="54" rx="10" />
+          <path d="M182 86 V144 M222 86 V144 M262 86 V144 M302 86 V144 M186 104 L302 128 M302 104 L186 128" stroke="currentColor" strokeWidth="6" fill="none" />
+          {/* Rumah pompa */}
+          <path d="M796 110 L854 82 L912 110 Z" />
+          <rect x="806" y="108" width="96" height="38" rx="2" />
+          {/* Reservoir */}
+          <rect x="1170" y="58" width="20" height="6" rx="2" />
+          <rect x="1174" y="62" width="12" height="18" />
+          <path d="M1058 92 Q 1180 52 1302 92 Z" />
+          <rect x="1058" y="92" width="244" height="52" rx="8" />
+        </svg>
+      </div>
       <main className="container">{children}</main>
       {!isLogin && (
         <nav className="bottomnav" aria-label="Navigasi utama">
