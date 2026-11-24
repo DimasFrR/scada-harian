@@ -53,7 +53,9 @@ textarea:focus-visible {
   padding-top: env(safe-area-inset-top, 0px);
 }
 .topbar-inner {
-  max-width: 760px;
+  /* Lebar konten 1120px di layar lebar: dulu 760px sehingga di laptop
+     isinya jadi kolom sempit dengan ruang kosong besar di kanan-kiri. */
+  max-width: 1120px;
   margin: 0 auto;
   padding: 8px 14px;
   display: flex;
@@ -84,7 +86,10 @@ textarea:focus-visible {
 }
 
 /* ---------- layout ---------- */
-.container { max-width: 760px; margin: 0 auto; padding: 14px 12px 24px; }
+/* Lebar konten 1120px di layar lebar (dulu 760px): di HP tidak berubah
+   karena lebar viewport yang menentukan; di laptop konten tidak lagi
+   jadi kolom sempit dengan ruang kosong besar di kanan-kiri. */
+.container { max-width: 1120px; margin: 0 auto; padding: 14px 12px 24px; }
 h1 { font-size: 22px; margin: 4px 0 4px; }
 h2 { font-size: 18px; margin: 20px 0 8px; }
 p.lead { color: var(--muted); margin: 0 0 12px; }
