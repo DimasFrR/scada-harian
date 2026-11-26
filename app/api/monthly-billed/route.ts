@@ -3,6 +3,7 @@ import {
   DbNotConfigured,
   deleteMonthlyBilled,
   getMonthlyBilledList,
+  getMonthlyBranchBilledList,
   getMonthlyReadingRecap,
   upsertMonthlyBilled,
 } from "@/lib/db";
@@ -30,11 +31,12 @@ function parseNum(v: unknown): number | null {
 
 export async function GET() {
   try {
-    const [rows, recap] = await Promise.all([
+    const [rows, recap, branches] = await Promise.all([
       getMonthlyBilledList(),
       getMonthlyReadingRecap(),
+      getMonthlyBranchBilledList(),
     ]);
-    return NextResponse.json({ ok: true, months: rows, recap });
+    return NextResponse.json({ ok: true, months: rows, recap, branches });
   } catch (e) {
     return dbError(e);
   }

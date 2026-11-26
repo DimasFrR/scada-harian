@@ -69,3 +69,52 @@ export function deriveBilled(b: MonthlyBilledRow): DerivedBilled {
     lossM3 !== null && b.m3 > 0 ? lossM3 * (b.harga_air / b.m3) : null;
   return { month: b.month, transmissionLoss, lossM3, lossPct, nrwPct, lossValueRp };
 }
+
+export interface BranchRowLike {
+  production_m3: number | null;
+  distribution_m3: number | null;
+  billed_m3: number;
+  loss_m3: number | null;
+  sl_installed: number | null;
+  sl_active: number | null;
+}
+
+export interface BranchTotals {
+  production: number;
+  distribution: number;
+  billed: number;
+  loss: number;
+  /** % kehilangan dari distribusi (jumlah kehilangan / jumlah distribusi). */
+  lossPct: number | null;
+  slInstalled: number;
+  slActive: number;
+}
+
+/** Jumlahkan baris-baris cabang satu bulan (NULL dilewati). Dipakai baris
+ *  TOTAL di tabel rincian per cabang — jumlahannya sama persis dengan
+ *  JUMLAH file Prodist Okt 2026 (tes: lib/monthly.test.ts). */
+export function sumBranchRows(rows: BranchRowLike[]): BranchTotals {
+  let production = 0;
+  let distribution = 0;
+  let billed = 0;
+  let loss = 0;
+  let slInstalled = 0;
+  let slActive = 0;
+  for (const r of rows) {
+    production += r.production_m3 ?? 0;
+    distribution += r.distribution_m3 ?? 0;
+    billed += r.billed_m3;
+    loss += r.loss_m3 ?? 0;
+    slInstalled += r.sl_installed ?? 0;
+    slActive += r.sl_active ?? 0;
+  }
+  return {
+    production,
+    distribution,
+    billed,
+    loss,
+    lossPct: distribution > 0 ? (loss / distribution) * 100 : null,
+    slInstalled,
+    slActive,
+  };
+}

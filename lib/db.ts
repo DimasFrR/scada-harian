@@ -3,6 +3,7 @@
 // Kalau DATABASE_URL tidak diset, query() melempar DbNotConfigured dan
 // halaman/API menampilkan pesan setup, bukan crash.
 import { Pool } from "pg";
+import { OCT_2026_BRANCH_ROWS } from "./monthlyBranchSeed";
 import { POINTS } from "./points";
 
 export class DbNotConfigured extends Error {
@@ -79,6 +80,23 @@ export async function ensureSchema(): Promise<void> {
         -- monthly_billed sudah ter-seed Okt 2026 sebelum kolom ini ada.
         ALTER TABLE monthly_billed ADD COLUMN IF NOT EXISTS production_m3 NUMERIC;
         ALTER TABLE monthly_billed ADD COLUMN IF NOT EXISTS distribution_m3 NUMERIC;
+        -- Rincian per cabang/unit per bulan (dari Bagian Produksi, mulai
+        -- Okt 2026). Produksi NULL = cabang itu tidak punya produksi sendiri
+        -- (dibukukan di Tasik Barat); kehilangan/NRW/SL NULL = sel kosong
+        -- di file sumber. Satu bulan bisa tidak punya baris sama sekali.
+        CREATE TABLE IF NOT EXISTS monthly_branch_billed (
+          month TEXT NOT NULL,
+          branch TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          production_m3 NUMERIC NULL,
+          distribution_m3 NUMERIC NULL,
+          billed_m3 NUMERIC NOT NULL,
+          loss_m3 NUMERIC NULL,
+          nrw_pct NUMERIC NULL,
+          sl_installed INTEGER NULL,
+          sl_active INTEGER NULL,
+          PRIMARY KEY (month, branch)
+        );
         -- Dedup kirim alarm WA: 1 baris = 1 alarm sudah dikirim untuk 1 pengukuran.
         CREATE TABLE IF NOT EXISTS alarm_notifications (
           measurement_id INTEGER PRIMARY KEY REFERENCES measurements(id) ON DELETE CASCADE,
@@ -86,13 +104,15 @@ export async function ensureSchema(): Promise<void> {
           sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
-      // Satu query untuk kedua hitungan seed (dulu 2 query terpisah).
-      const { rows: counts } = await p.query<{ mb: string; p: string }>(
+      // Satu query untuk ketiga hitungan seed (dulu 2 query terpisah).
+      const { rows: counts } = await p.query<{ mb: string; p: string; bb: string }>(
         `SELECT (SELECT COUNT(*)::text FROM monthly_billed) AS mb,
-                (SELECT COUNT(*)::text FROM points) AS p`,
+                (SELECT COUNT(*)::text FROM points) AS p,
+                (SELECT COUNT(*)::text FROM monthly_branch_billed WHERE month = '2026-10') AS bb`,
       );
       const mbCount = Number(counts[0].mb);
       const pointsCount = Number(counts[0].p);
+      const branchCount = Number(counts[0].bb);
       // Seed Oktober 2026 (terverifikasi dari Lap DRD Excel, 18 Nov 2026)
       // — hanya bila tabel masih kosong.
       if (mbCount === 0) {
@@ -111,6 +131,36 @@ export async function ensureSchema(): Promise<void> {
             SET production_m3 = 1038148.11, distribution_m3 = 1036354.66
           WHERE month = '2026-10' AND production_m3 IS NULL`,
       );
+      // Seed rincian per cabang Okt 2026 (20 baris, dari file Bagian
+      // Produksi — lib/monthlyBranchSeed.ts) — hanya bila belum ada.
+      if (branchCount === 0) {
+        const cols =
+          "(month, branch, sort_order, production_m3, distribution_m3, billed_m3, loss_m3, nrw_pct, sl_installed, sl_active)";
+        const placeholders: string[] = [];
+        const params: unknown[] = [];
+        OCT_2026_BRANCH_ROWS.forEach((r, i) => {
+          const b = i * 10;
+          placeholders.push(
+            `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10})`,
+          );
+          params.push(
+            r.month,
+            r.branch,
+            r.sort_order,
+            r.production_m3,
+            r.distribution_m3,
+            r.billed_m3,
+            r.loss_m3,
+            r.nrw_pct,
+            r.sl_installed,
+            r.sl_active,
+          );
+        });
+        await p.query(
+          `INSERT INTO monthly_branch_billed ${cols} VALUES ${placeholders.join(", ")} ON CONFLICT (month, branch) DO NOTHING`,
+          params as never[],
+        );
+      }
       // Seed 29 titik kanonis — hanya bila tabel masih kosong.
       if (pointsCount === 0) {
         for (let i = 0; i < POINTS.length; i++) {
@@ -153,6 +203,9 @@ export async function query<T>(
           k === "m3" ||
           k === "production_m3" ||
           k === "distribution_m3" ||
+          k === "billed_m3" ||
+          k === "loss_m3" ||
+          k === "nrw_pct" ||
           k === "sl" ||
           k === "harga_air" ||
           k === "materai" ||
@@ -238,6 +291,29 @@ export async function getLatestMonthlyBilled(): Promise<MonthlyBilledRow | null>
 /** Semua bulan, terbaru dulu (untuk halaman Bulanan). */
 export async function getMonthlyBilledList(): Promise<MonthlyBilledRow[]> {
   return query<MonthlyBilledRow>(`${MONTHLY_SELECT} ORDER BY month DESC`);
+}
+
+export interface MonthlyBranchBilledRow {
+  month: string; // YYYY-MM
+  branch: string;
+  sort_order: number;
+  production_m3: number | null;
+  distribution_m3: number | null;
+  billed_m3: number;
+  loss_m3: number | null;
+  nrw_pct: number | null;
+  sl_installed: number | null;
+  sl_active: number | null;
+}
+
+/** Semua rincian per cabang, terbaru dulu (untuk halaman Bulanan). */
+export async function getMonthlyBranchBilledList(): Promise<MonthlyBranchBilledRow[]> {
+  return query<MonthlyBranchBilledRow>(
+    `SELECT month, branch, sort_order, production_m3, distribution_m3,
+            billed_m3, loss_m3, nrw_pct, sl_installed, sl_active
+       FROM monthly_branch_billed
+      ORDER BY month DESC, sort_order ASC, branch ASC`,
+  );
 }
 
 /** Simpan / perbarui satu bulan (upsert berdasar month). */

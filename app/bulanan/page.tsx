@@ -3,13 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import MonthlyPdfButton from "@/components/MonthlyPdfButton";
 import { formatID, monthNameID } from "@/lib/alarms";
-import type { MonthlyBilledRow, MonthlyReadingRecap } from "@/lib/db";
+import type {
+  MonthlyBilledRow,
+  MonthlyBranchBilledRow,
+  MonthlyReadingRecap,
+} from "@/lib/db";
 import {
   deriveBilled,
   fmt2,
   fmtLossValueRp,
   fmtPct2,
   shortMonthID,
+  sumBranchRows,
 } from "@/lib/monthly";
 import type { MonthlyPdfInput } from "@/lib/monthlyPdf";
 
@@ -146,11 +151,78 @@ function MonthlyLineChart({ rows }: { rows: { month: string; lossPct: number; nr
   );
 }
 
+function BranchNrwChart({
+  rows,
+  totalPct,
+}: {
+  rows: { branch: string; nrw: number | null }[];
+  totalPct: number;
+}) {
+  const maxV = Math.max(...rows.map((r) => r.nrw ?? 0), 1);
+  return (
+    <div className="chart-box">
+      <h3>NRW per cabang (%) — merah = di atas total perusahaan</h3>
+      <div>
+        {rows.map((r) => {
+          const above = r.nrw !== null && r.nrw > totalPct;
+          return (
+            <div
+              key={r.branch}
+              style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}
+            >
+              <span
+                style={{ width: 150, fontSize: 13, textAlign: "right", flexShrink: 0 }}
+              >
+                {r.branch}
+              </span>
+              <span
+                style={{
+                  flex: 1,
+                  height: 16,
+                  background: "#f1f5f9",
+                  borderRadius: 4,
+                  overflow: "hidden",
+                }}
+              >
+                {r.nrw !== null && (
+                  <span
+                    style={{
+                      display: "block",
+                      height: "100%",
+                      width: `${(r.nrw / maxV) * 100}%`,
+                      background: above ? "#dc2626" : "#0e7c5f",
+                    }}
+                  />
+                )}
+              </span>
+              <span
+                style={{
+                  width: 64,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color:
+                    r.nrw === null ? "#64748b" : above ? "#dc2626" : "#0e7c5f",
+                }}
+              >
+                {r.nrw !== null ? fmtPct2(r.nrw) : "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="muted" style={{ marginTop: 8 }}>
+        Total perusahaan {fmtPct2(totalPct)} — bar merah di atas angka itu.
+      </p>
+    </div>
+  );
+}
+
 // ---------- halaman ----------
 
 export default function BulananPage() {
   const [months, setMonths] = useState<MonthlyBilledRow[]>([]);
   const [recap, setRecap] = useState<MonthlyReadingRecap[]>([]);
+  const [branches, setBranches] = useState<MonthlyBranchBilledRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState("");
@@ -164,6 +236,7 @@ export default function BulananPage() {
         if (data.ok) {
           setMonths(data.months);
           setRecap(data.recap);
+          setBranches(data.branches ?? []);
         } else {
           setError(data.error || "Gagal memuat rekap bulanan.");
         }
@@ -196,6 +269,20 @@ export default function BulananPage() {
     [months, selected],
   );
   const derived = useMemo(() => (billed ? deriveBilled(billed) : null), [billed]);
+
+  // Rincian per cabang bulan yang dipilih (urut file) — kosong bila bulan
+  // itu belum punya rincian cabang (mis. Nov 2026), seksinya disembunyikan.
+  const selectedBranches = useMemo(
+    () =>
+      branches
+        .filter((b) => b.month === selected)
+        .sort((a, b) => a.sort_order - b.sort_order || a.branch.localeCompare(b.branch)),
+    [branches, selected],
+  );
+  const branchTotals = useMemo(
+    () => (selectedBranches.length > 0 ? sumBranchRows(selectedBranches) : null),
+    [selectedBranches],
+  );
 
   // Bulan-bulan dengan billing, urut kronologis — untuk grafik tren.
   const chartRows = useMemo(() => {
@@ -344,6 +431,103 @@ export default function BulananPage() {
                   Produksi / distribusi bulan ini belum masuk, jadi kehilangan air belum
                   bisa dihitung.
                 </div>
+              )}
+
+              {selectedBranches.length > 0 && branchTotals && (
+                <>
+                  <h2>Rincian per Cabang — {monthNameID(billed.month)}</h2>
+                  <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Cabang / Unit</th>
+                            <th className="num">Produksi (m³)</th>
+                            <th className="num">Distribusi (m³)</th>
+                            <th className="num">Terjual (m³)</th>
+                            <th className="num">Kehilangan (m³)</th>
+                            <th className="num">NRW</th>
+                            <th className="num">SL Terpasang</th>
+                            <th className="num">SL Aktif</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedBranches.map((r) => (
+                            <tr key={r.branch}>
+                              <td>
+                                <b>{r.branch}</b>
+                              </td>
+                              <td className="num">
+                                {r.production_m3 !== null ? fmt2(r.production_m3) : "—"}
+                              </td>
+                              <td className="num">
+                                {r.distribution_m3 !== null ? fmt2(r.distribution_m3) : "—"}
+                              </td>
+                              <td className="num">{fmt2(r.billed_m3)}</td>
+                              <td className="num">
+                                {r.loss_m3 !== null ? fmt2(r.loss_m3) : "—"}
+                              </td>
+                              <td
+                                className="num"
+                                style={
+                                  r.nrw_pct !== null &&
+                                  derived.lossPct !== null &&
+                                  r.nrw_pct > derived.lossPct
+                                    ? { color: "#dc2626", fontWeight: 700 }
+                                    : undefined
+                                }
+                              >
+                                {r.nrw_pct !== null ? fmtPct2(r.nrw_pct) : "—"}
+                              </td>
+                              <td className="num">
+                                {r.sl_installed !== null ? formatID(r.sl_installed) : "—"}
+                              </td>
+                              <td className="num">
+                                {r.sl_active !== null ? formatID(r.sl_active) : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: "#e6f4fb", fontWeight: 700 }}>
+                            <td>
+                              <b>TOTAL</b>
+                            </td>
+                            <td className="num">
+                              {billed.production_m3 !== null ? fmt2(billed.production_m3) : "—"}
+                            </td>
+                            <td className="num">
+                              {billed.distribution_m3 !== null ? fmt2(billed.distribution_m3) : "—"}
+                            </td>
+                            <td className="num">{fmt2(billed.m3)}</td>
+                            <td className="num">
+                              {derived.lossM3 !== null ? fmt2(derived.lossM3) : "—"}
+                            </td>
+                            <td className="num">
+                              {derived.lossPct !== null ? fmtPct2(derived.lossPct) : "—"}
+                            </td>
+                            <td className="num">{formatID(branchTotals.slInstalled)}</td>
+                            <td className="num">{formatID(branchTotals.slActive)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <p className="muted">
+                    SALAWU dan CIAWI masing-masing punya 2 sumber air
+                    (Cisitu/Cibatur dan Sanghiang/Cipondok). &quot;—&quot; =
+                    sel kosong di file Bagian Produksi; cabang tanpa produksi
+                    sendiri (produksinya dibukukan di Tasik Barat) tampil
+                    &quot;—&quot; di kolom Produksi.
+                  </p>
+                  {derived.lossPct !== null && (
+                    <BranchNrwChart
+                      rows={selectedBranches.map((r) => ({
+                        branch: r.branch,
+                        nrw: r.nrw_pct,
+                      }))}
+                      totalPct={derived.lossPct}
+                    />
+                  )}
+                </>
               )}
 
               <h2>Tren Bulanan</h2>
